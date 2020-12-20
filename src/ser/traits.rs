@@ -2,8 +2,11 @@
 pub struct SerializeError;
 
 pub trait Serializer {
+    fn serialize_null(&mut self) -> Result<(), SerializeError>;
+    fn serialize_bool(&mut self, value: bool) -> Result<(), SerializeError>;
     fn serialize_signed(&mut self, value: i64) -> Result<(), SerializeError>;
     fn serialize_unsigned(&mut self, value: u64) -> Result<(), SerializeError>;
+    fn serialize_float(&mut self, value: f64) -> Result<(), SerializeError>;
     fn serialize_str(&mut self, value: &str) -> Result<(), SerializeError>;
     fn serialize_enum(&mut self, value: u32, name: &'static str) -> Result<(), SerializeError>;
     fn start_struct(&mut self) -> Result<(), SerializeError>;

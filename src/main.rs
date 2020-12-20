@@ -5,6 +5,24 @@ mod ser;
 use ser::*;
 use std::fmt::Write;
 
+struct Place<T> {
+    out: Option<T>,
+}
+
+impl<T> Place<T> {
+    pub fn new(out: &mut Option<T>) -> &mut Self {
+        unsafe { &mut *{ out as *mut Option<T> as *mut Self } }
+    }
+}
+
+trait Visitor {
+
+}
+
+trait Deserialize: Sized {
+    fn begin(out: &mut Option<Self>) -> &mut dyn Visitor;
+}
+
 #[derive(Default)]
 struct PrettyJsonSerializer {
     indent_level: usize,
@@ -21,12 +39,31 @@ impl PrettyJsonSerializer {
 }
 
 impl Serializer for PrettyJsonSerializer {
+    fn serialize_null(&mut self) -> Result<(), SerializeError> {
+        write!(&mut self.buffer, "null")?;
+        Ok(())    
+    }
+
+    fn serialize_bool(&mut self, value: bool) -> Result<(), SerializeError> {
+        if value {
+            write!(&mut self.buffer, "true")?;
+        } else {
+            write!(&mut self.buffer, "false")?;
+        }
+        Ok(())
+    }
+
     fn serialize_signed(&mut self, value: i64) -> Result<(), SerializeError> {
         write!(&mut self.buffer, "{}", value)?;
         Ok(())
     }
 
     fn serialize_unsigned(&mut self, value: u64) -> Result<(), SerializeError> {
+        write!(&mut self.buffer, "{}", value)?;
+        Ok(())
+    }
+
+    fn serialize_float(&mut self, value: f64) -> Result<(), SerializeError> {
         write!(&mut self.buffer, "{}", value)?;
         Ok(())
     }
@@ -122,6 +159,8 @@ serde! {
         age: i32 = 2,
         birth_date: Date = 3,
         pets: Vec<String> = 4,
+        height: f32 = 5,
+        is_cool: bool = 6,
     }
 }
 
@@ -129,6 +168,8 @@ fn main() {
     let stuff = Person {
         name: "Steven".to_owned(),
         age: 27,
+        height: 1.735,
+        is_cool: true,
         birth_date: Date {
             day: 19,
             month: Month::October,
