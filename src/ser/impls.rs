@@ -8,7 +8,7 @@ macro_rules! serialize_signed {
                 Ok(())
             }
         }
-    }
+    };
 }
 
 serialize_signed!(i8);
@@ -25,7 +25,7 @@ macro_rules! serialize_unsigned {
                 Ok(())
             }
         }
-    }
+    };
 }
 
 serialize_unsigned!(u8);
@@ -42,7 +42,7 @@ macro_rules! serialize_float {
                 Ok(())
             }
         }
-    }
+    };
 }
 
 serialize_float!(f32);
