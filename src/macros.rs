@@ -57,8 +57,8 @@ macro_rules! serde {
             }
         }
 
-        impl $crate::Deserialize for $name {
-            fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn $crate::Visitor {
+        impl $crate::de::Deserialize for $name {
+            fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn $crate::de::Visitor {
                 struct Builder<'a> {
                     deserialize_out_place: &'a mut Option<$name>,
                     $(
@@ -77,12 +77,12 @@ macro_rules! serde {
                     }
                 }
 
-                impl<'a> $crate::StructBuilder for Builder<'a> {
-                    fn member(&mut self, id: Option<u64>, name: Option<&str>) -> Result<&mut dyn $crate::Visitor, $crate::DeserializeError> {
+                impl<'a> $crate::de::StructBuilder for Builder<'a> {
+                    fn member(&mut self, id: Option<u64>, name: Option<&str>) -> Result<&mut dyn $crate::de::Visitor, $crate::de::DeserializeError> {
                         if let Some(id) = id {
                             match id {
                                 $(
-                                    $id => return Ok(<$type as $crate::Deserialize>::begin_deserialize(&mut self.$field)),
+                                    $id => return Ok(<$type as $crate::de::Deserialize>::begin_deserialize(&mut self.$field)),
                                 )+
                                 _ => {},
                             }
@@ -91,19 +91,19 @@ macro_rules! serde {
                         if let Some(name) = name {
                             match name {
                                 $(
-                                    stringify!($field) => return Ok(<$type as $crate::Deserialize>::begin_deserialize(&mut self.$field)),
+                                    stringify!($field) => return Ok(<$type as $crate::de::Deserialize>::begin_deserialize(&mut self.$field)),
                                 )+
                                 _ => {},
                             }
                         }
 
-                        return Err($crate::DeserializeError::UnknownField);
+                        return Err($crate::de::DeserializeError::UnknownField);
                     }
 
-                    fn finish(&mut self) -> Result<(), $crate::DeserializeError> {
+                    fn finish(&mut self) -> Result<(), $crate::de::DeserializeError> {
                         let result = $name {
                             $(
-                                $field: self.$field.take().ok_or($crate::DeserializeError::MissingField(stringify!($field)))?,
+                                $field: self.$field.take().ok_or($crate::de::DeserializeError::MissingField(stringify!($field)))?,
                             )+
                         };
                         self.deserialize_out_place.replace(result);
@@ -111,12 +111,12 @@ macro_rules! serde {
                     }
                 }
 
-                impl $crate::Visitor for Place<$name> {
-                    fn visit_struct<'a>(&'a mut self) -> Result<Box<dyn StructBuilder + 'a>, DeserializeError> {
+                impl $crate::de::Visitor for $crate::de::Place<$name> {
+                    fn visit_struct<'a>(&'a mut self) -> Result<Box<dyn $crate::de::StructBuilder + 'a>, $crate::de::DeserializeError> {
                         Ok(Box::new(Builder::new(&mut self.out)))
                     }
                 }
-                return Place::new(out);
+                return $crate::de::Place::new(out);
             }
         }
     };
@@ -158,10 +158,10 @@ macro_rules! serde {
             }
         }
 
-        impl $crate::Deserialize for $name {
-            fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn $crate::Visitor {
-                impl $crate::Visitor for $crate::Place<$name> {
-                    fn visit_str(&mut self, value: &str) -> Result<(), $crate::DeserializeError> {
+        impl $crate::de::Deserialize for $name {
+            fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn $crate::de::Visitor {
+                impl $crate::de::Visitor for $crate::de::Place<$name> {
+                    fn visit_str(&mut self, value: &str) -> Result<(), $crate::de::DeserializeError> {
                         let (id, name) = if let Some(colon_index) = value.find(':') {
                             let id = value[..colon_index].parse::<i64>().ok();
                             let name = &value[(colon_index + 1)..];
@@ -197,20 +197,20 @@ macro_rules! serde {
                             return Ok(());
                         }
                         else {
-                            return Err($crate::DeserializeError::UnknownEnumVariant);
+                            return Err($crate::de::DeserializeError::UnknownEnumVariant);
                         }
                     }
 
-                    fn visit_signed(&mut self, value: i64) -> Result<(), $crate::DeserializeError> {
+                    fn visit_signed(&mut self, value: i64) -> Result<(), $crate::de::DeserializeError> {
                         if value < 0 {
-                            Err($crate::DeserializeError::UnknownEnumVariant)
+                            Err($crate::de::DeserializeError::UnknownEnumVariant)
                         }
                         else {
                             self.visit_unsigned(value as u64)
                         }
                     }
 
-                    fn visit_unsigned(&mut self, value: u64) -> Result<(), $crate::DeserializeError> {
+                    fn visit_unsigned(&mut self, value: u64) -> Result<(), $crate::de::DeserializeError> {
                         let variant = match value {
                             $(
                                 $id => Some($name::$variant),
@@ -223,11 +223,11 @@ macro_rules! serde {
                             return Ok(());
                         }
                         else {
-                            return Err($crate::DeserializeError::UnknownEnumVariant);
+                            return Err($crate::de::DeserializeError::UnknownEnumVariant);
                         }
                     }
                 }
-                return Place::new(out);
+                return $crate::de::Place::new(out);
             }
         }
     }
