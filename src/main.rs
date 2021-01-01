@@ -4,7 +4,7 @@ mod ser;
 
 use ser::*;
 use std::fmt::Write;
-use std::iter::Peekable;
+use std::iter::{Enumerate, Peekable};
 use std::str::Chars;
 
 struct Place<T> {
@@ -94,6 +94,11 @@ impl Deserialize for i32 {
                     Ok(())
                 }
             }
+
+            fn visit_bool(&mut self, value: bool) -> Result<(), DeserializeError> {
+                self.out.replace(if value { 1 } else { 0 });
+                Ok(())
+            }
         }
         return Place::new(out);
     }
@@ -128,6 +133,11 @@ impl Deserialize for u32 {
                     Ok(())
                 }
             }
+
+            fn visit_bool(&mut self, value: bool) -> Result<(), DeserializeError> {
+                self.out.replace(if value { 1 } else { 0 });
+                Ok(())
+            }
         }
         return Place::new(out);
     }
@@ -150,24 +160,128 @@ impl Deserialize for f32 {
                 self.out.replace(value as f32);
                 Ok(())
             }
+
+            fn visit_bool(&mut self, value: bool) -> Result<(), DeserializeError> {
+                self.out.replace(if value { 1.0 } else { 0.0 });
+                Ok(())
+            }
+        }
+        return Place::new(out);
+    }
+}
+
+impl<T: Deserialize> Deserialize for Option<T> {
+    fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn Visitor {
+        impl<T: Deserialize> Visitor for Place<Option<T>> {
+            fn visit_null(&mut self) -> Result<(), DeserializeError> {
+                self.out.replace(None);
+                Ok(())
+            }
+
+            fn visit_bool(&mut self, value: bool) -> Result<(), DeserializeError> {
+                let mut place = None;
+                T::begin_deserialize(&mut place).visit_bool(value)?;
+                self.out.replace(place);
+                Ok(())
+            }
+
+            fn visit_signed(&mut self, value: i64) -> Result<(), DeserializeError> {
+                let mut place = None;
+                T::begin_deserialize(&mut place).visit_signed(value)?;
+                self.out.replace(place);
+                Ok(())
+            }
+
+            fn visit_unsigned(&mut self, value: u64) -> Result<(), DeserializeError> {
+                let mut place = None;
+                T::begin_deserialize(&mut place).visit_unsigned(value)?;
+                self.out.replace(place);
+                Ok(())
+            }
+
+            fn visit_float(&mut self, value: f64) -> Result<(), DeserializeError> {
+                let mut place = None;
+                T::begin_deserialize(&mut place).visit_float(value)?;
+                self.out.replace(place);
+                Ok(())
+            }
+
+            fn visit_str(&mut self, value: &str) -> Result<(), DeserializeError> {
+                let mut place = None;
+                T::begin_deserialize(&mut place).visit_str(value)?;
+                self.out.replace(place);
+                Ok(())
+            }
+        }
+
+        return Place::new(out);
+    }
+}
+
+impl Deserialize for bool {
+    fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn Visitor {
+        impl Visitor for Place<bool> {
+            fn visit_signed(&mut self, value: i64) -> Result<(), DeserializeError> {
+                self.out.replace(value != 0);
+                Ok(())
+            }
+
+            fn visit_unsigned(&mut self, value: u64) -> Result<(), DeserializeError> {
+                self.out.replace(value != 0);
+                Ok(())
+            }
+
+            fn visit_float(&mut self, value: f64) -> Result<(), DeserializeError> {
+                self.out.replace(value != 0.0);
+                Ok(())
+            }
+
+            fn visit_bool(&mut self, value: bool) -> Result<(), DeserializeError> {
+                self.out.replace(value);
+                Ok(())
+            }
+        }
+        return Place::new(out);
+    }
+}
+
+impl Deserialize for String {
+    fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn Visitor {
+        impl Visitor for Place<String> {
+            fn visit_str(&mut self, value: &str) -> Result<(), DeserializeError> {
+                self.out.replace(value.to_owned());
+                Ok(())
+            }
         }
         return Place::new(out);
     }
 }
 
 struct JsonDeserializer<'a> {
-    iter: Peekable<Chars<'a>>,
+    data: &'a str,
+    iter: Peekable<Enumerate<Chars<'a>>>,
 }
 
 impl<'a> JsonDeserializer<'a> {
     fn new(s: &'a str) -> Self {
         Self {
-            iter: s.chars().peekable(),
+            data: s,
+            iter: s.chars().enumerate().peekable(),
         }
     }
 
+    #[inline]
+    fn peek_char(&mut self) -> Option<char> {
+        self.iter.peek().map(|(_, c)| *c)
+    }
+
+    #[inline]
+    fn next_char(&mut self) -> Option<char> {
+        self.iter.next().map(|(_, c)| c)
+    }
+
     fn parse_integer(&mut self, visitor: &mut dyn Visitor) -> Result<(), DeserializeError> {
-        let is_negative = if matches!(self.iter.peek(), Some('-')) {
+        let is_negative = if matches!(self.peek_char(), Some('-')) {
             self.iter.next();
             true
         } else {
@@ -179,7 +293,7 @@ impl<'a> JsonDeserializer<'a> {
         let mut int_part: u64 = 0;
 
         loop {
-            match self.iter.peek() {
+            match self.peek_char() {
                 Some(c @ '0'..='9') => {
                     let c = c.to_digit(10).unwrap() as u64;
                     if int_part > (std::u64::MAX - c) / 10 {
@@ -194,10 +308,10 @@ impl<'a> JsonDeserializer<'a> {
 
         let mut fract_part: f64 = 0.0;
         let mut fract_part_mul: f64 = 0.1;
-        if matches!(self.iter.peek(), Some('.')) {
+        if matches!(self.peek_char(), Some('.')) {
             self.iter.next();
             loop {
-                match self.iter.peek() {
+                match self.peek_char() {
                     Some(c @ '0'..='9') => {
                         let c = c.to_digit(10).unwrap() as f64;
                         fract_part = fract_part + fract_part_mul * c;
@@ -227,12 +341,71 @@ impl<'a> JsonDeserializer<'a> {
             }
         }
     }
+
+    fn check_keywork(&mut self, kw: &'static str) -> bool {
+        if kw
+            .chars()
+            .all(|c| matches!(self.next_char(), Some(r) if r == c))
+        {
+            !self.peek_char().filter(|c| c.is_alphanumeric()).is_some()
+        } else {
+            false
+        }
+    }
+
+    fn parse_null(&mut self, visitor: &mut dyn Visitor) -> Result<(), DeserializeError> {
+        if self.check_keywork("null") {
+            return visitor.visit_null();
+        } else {
+            Err(DeserializeError::UnknownError)
+        }
+    }
+
+    fn parse_true(&mut self, visitor: &mut dyn Visitor) -> Result<(), DeserializeError> {
+        if self.check_keywork("true") {
+            return visitor.visit_bool(true);
+        } else {
+            Err(DeserializeError::UnknownError)
+        }
+    }
+
+    fn parse_false(&mut self, visitor: &mut dyn Visitor) -> Result<(), DeserializeError> {
+        if self.check_keywork("false") {
+            return visitor.visit_bool(false);
+        } else {
+            Err(DeserializeError::UnknownError)
+        }
+    }
+
+    fn parse_str(&mut self, visitor: &mut dyn Visitor) -> Result<(), DeserializeError> {
+        let first_index = match self.iter.next() {
+            Some((i, '"')) => i + 1,
+            _ => return Err(DeserializeError::UnknownError),
+        };
+
+        // @Todo Handle escaped characters
+
+        let last_index = loop {
+            match self.iter.next() {
+                Some((i, '"')) => break i,
+                None => return Err(DeserializeError::UnknownError),
+                _ => {}
+            }
+        };
+
+        visitor.visit_str(&self.data[first_index..last_index])?;
+        Ok(())
+    }
 }
 
 impl<'a> Deserializer for JsonDeserializer<'a> {
     fn deserialize(&mut self, visitor: &mut dyn Visitor) -> Result<(), DeserializeError> {
-        match self.iter.peek() {
+        match self.peek_char() {
             Some('0'..='9') | Some('-') => self.parse_integer(visitor),
+            Some('n') => self.parse_null(visitor),
+            Some('t') => self.parse_true(visitor),
+            Some('f') => self.parse_false(visitor),
+            Some('"') => self.parse_str(visitor),
             Some(_) => Err(DeserializeError::UnknownError),
             None => Err(DeserializeError::UnexpectedEof),
         }
@@ -432,6 +605,30 @@ fn de() {
 
     let mut de = JsonDeserializer::new("-123");
     assert_eq!(f32::deserialize(&mut de), Ok(-123.0));
+
+    let mut de = JsonDeserializer::new("87");
+    assert_eq!(Option::<i32>::deserialize(&mut de), Ok(Some(87)));
+
+    let mut de = JsonDeserializer::new("null");
+    assert_eq!(Option::<i32>::deserialize(&mut de), Ok(None));
+
+    let mut de = JsonDeserializer::new("84");
+    assert_eq!(bool::deserialize(&mut de), Ok(true));
+
+    let mut de = JsonDeserializer::new("0");
+    assert_eq!(bool::deserialize(&mut de), Ok(false));
+
+    let mut de = JsonDeserializer::new("true");
+    assert_eq!(bool::deserialize(&mut de), Ok(true));
+
+    let mut de = JsonDeserializer::new("false");
+    assert_eq!(bool::deserialize(&mut de), Ok(false));
+
+    let mut de = JsonDeserializer::new("\"hello world :)\"");
+    assert!(matches!(String::deserialize(&mut de), Ok(ref s) if s == "hello world :)"));
+
+    let mut de = JsonDeserializer::new("\"\"");
+    assert!(matches!(String::deserialize(&mut de), Ok(ref s) if s == ""));
 }
 
 fn main() {
