@@ -24,6 +24,12 @@ enum DeserializeError {
     IncompatibleNumericType,
     UnexpectedEof,
     UnknownEnumVariant,
+    ParsingError,
+}
+
+trait SeqBuilder {
+    fn element(&mut self) -> Result<&mut dyn Visitor, DeserializeError>;
+    fn finish(&mut self) -> Result<(), DeserializeError>;
 }
 
 trait Visitor {
@@ -48,6 +54,13 @@ trait Visitor {
     }
 
     fn visit_str(&mut self, _value: &str) -> Result<(), DeserializeError> {
+        Err(DeserializeError::UnimplementedVisit)
+    }
+
+    fn visit_seq<'a>(
+        &'a mut self,
+        _size_hint: Option<usize>,
+    ) -> Result<Box<dyn SeqBuilder + 'a>, DeserializeError> {
         Err(DeserializeError::UnimplementedVisit)
     }
 }
@@ -258,6 +271,56 @@ impl Deserialize for String {
     }
 }
 
+impl<T: Deserialize> Deserialize for Vec<T> {
+    fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn Visitor {
+        struct Builder<'a, T> {
+            out: &'a mut Option<Vec<T>>,
+            vec: Vec<T>,
+            elmt: Option<T>,
+        }
+
+        impl<'a, T> Builder<'a, T> {
+            fn new(out: &'a mut Option<Vec<T>>) -> Self {
+                Self {
+                    out,
+                    vec: Vec::new(),
+                    elmt: None,
+                }
+            }
+
+            fn shift(&mut self) {
+                if let Some(e) = self.elmt.take() {
+                    self.vec.push(e);
+                }
+            }
+        }
+
+        impl<'a, T: Deserialize> SeqBuilder for Builder<'a, T> {
+            fn element(&mut self) -> Result<&mut dyn Visitor, DeserializeError> {
+                self.shift();
+                Ok(T::begin_deserialize(&mut self.elmt))
+            }
+
+            fn finish(&mut self) -> Result<(), DeserializeError> {
+                self.shift();
+                self.out
+                    .replace(std::mem::replace(&mut self.vec, Vec::new()));
+                Ok(())
+            }
+        }
+
+        impl<T: Deserialize> Visitor for Place<Vec<T>> {
+            fn visit_seq(
+                &mut self,
+                _size_hint: Option<usize>,
+            ) -> Result<Box<dyn SeqBuilder + '_>, DeserializeError> {
+                Ok(Box::new(Builder::new(&mut self.out)))
+            }
+        }
+        return Place::new(out);
+    }
+}
+
 struct JsonDeserializer<'a> {
     data: &'a str,
     iter: Peekable<Enumerate<Chars<'a>>>,
@@ -358,7 +421,7 @@ impl<'a> JsonDeserializer<'a> {
         if self.check_keywork("null") {
             return visitor.visit_null();
         } else {
-            Err(DeserializeError::UnknownError)
+            Err(DeserializeError::ParsingError)
         }
     }
 
@@ -366,7 +429,7 @@ impl<'a> JsonDeserializer<'a> {
         if self.check_keywork("true") {
             return visitor.visit_bool(true);
         } else {
-            Err(DeserializeError::UnknownError)
+            Err(DeserializeError::ParsingError)
         }
     }
 
@@ -374,14 +437,14 @@ impl<'a> JsonDeserializer<'a> {
         if self.check_keywork("false") {
             return visitor.visit_bool(false);
         } else {
-            Err(DeserializeError::UnknownError)
+            Err(DeserializeError::ParsingError)
         }
     }
 
     fn parse_str(&mut self, visitor: &mut dyn Visitor) -> Result<(), DeserializeError> {
         let first_index = match self.iter.next() {
             Some((i, '"')) => i + 1,
-            _ => return Err(DeserializeError::UnknownError),
+            _ => return Err(DeserializeError::ParsingError),
         };
 
         // @Todo Handle escaped characters
@@ -389,13 +452,36 @@ impl<'a> JsonDeserializer<'a> {
         let last_index = loop {
             match self.iter.next() {
                 Some((i, '"')) => break i,
-                None => return Err(DeserializeError::UnknownError),
+                None => return Err(DeserializeError::UnexpectedEof),
                 _ => {}
             }
         };
 
         visitor.visit_str(&self.data[first_index..last_index])?;
         Ok(())
+    }
+
+    fn parse_sequence(&mut self, visitor: &mut dyn Visitor) -> Result<(), DeserializeError> {
+        self.iter.next();
+
+        let mut seq = visitor.visit_seq(None)?;
+
+        loop {
+            if self.peek_char() == Some(']') {
+                self.iter.next();
+                return seq.finish();
+            }
+
+            self.deserialize(seq.element()?)?;
+
+            match self.peek_char() {
+                Some(',') => {
+                    self.next_char();
+                }
+                Some(']') => {}
+                _ => return Err(DeserializeError::ParsingError),
+            }
+        }
     }
 }
 
@@ -407,7 +493,8 @@ impl<'a> Deserializer for JsonDeserializer<'a> {
             Some('t') => self.parse_true(visitor),
             Some('f') => self.parse_false(visitor),
             Some('"') => self.parse_str(visitor),
-            Some(_) => Err(DeserializeError::UnknownError),
+            Some('[') => self.parse_sequence(visitor),
+            Some(_) => Err(DeserializeError::ParsingError),
             None => Err(DeserializeError::UnexpectedEof),
         }
     }
@@ -510,6 +597,90 @@ impl Serializer for PrettyJsonSerializer {
     fn end_seq(&mut self) -> Result<(), SerializeError> {
         self.indent_level -= 1;
         self.print_indent()?;
+        write!(&mut self.buffer, "]")?;
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct JsonSerializer {
+    buffer: String,
+}
+
+impl Serializer for JsonSerializer {
+    fn serialize_null(&mut self) -> Result<(), SerializeError> {
+        write!(&mut self.buffer, "null")?;
+        Ok(())
+    }
+
+    fn serialize_bool(&mut self, value: bool) -> Result<(), SerializeError> {
+        if value {
+            write!(&mut self.buffer, "true")?;
+        } else {
+            write!(&mut self.buffer, "false")?;
+        }
+        Ok(())
+    }
+
+    fn serialize_signed(&mut self, value: i64) -> Result<(), SerializeError> {
+        write!(&mut self.buffer, "{}", value)?;
+        Ok(())
+    }
+
+    fn serialize_unsigned(&mut self, value: u64) -> Result<(), SerializeError> {
+        write!(&mut self.buffer, "{}", value)?;
+        Ok(())
+    }
+
+    fn serialize_float(&mut self, value: f64) -> Result<(), SerializeError> {
+        write!(&mut self.buffer, "{}", value)?;
+        Ok(())
+    }
+
+    fn serialize_str(&mut self, value: &str) -> Result<(), SerializeError> {
+        write!(&mut self.buffer, "\"{}\"", value)?;
+        Ok(())
+    }
+
+    fn serialize_enum(&mut self, value: u32, name: &'static str) -> Result<(), SerializeError> {
+        write!(&mut self.buffer, "\"{}:{}\"", value, name)?;
+        Ok(())
+    }
+
+    fn start_struct(&mut self) -> Result<(), SerializeError> {
+        write!(&mut self.buffer, "{{")?;
+        Ok(())
+    }
+
+    fn serialize_struct_field(
+        &mut self,
+        field_id: u32,
+        field_name: &'static str,
+        value: &dyn Serialize,
+    ) -> Result<(), SerializeError> {
+        write!(&mut self.buffer, "\"{}:{}\":", field_id, field_name)?;
+        value.serialize(self)?;
+        write!(&mut self.buffer, ",")?;
+        Ok(())
+    }
+
+    fn end_struct(&mut self) -> Result<(), SerializeError> {
+        write!(&mut self.buffer, "}}")?;
+        Ok(())
+    }
+
+    fn start_seq(&mut self, _len: usize) -> Result<(), SerializeError> {
+        write!(&mut self.buffer, "[")?;
+        Ok(())
+    }
+
+    fn serialize_seq_elmt(&mut self, value: &dyn Serialize) -> Result<(), SerializeError> {
+        value.serialize(self)?;
+        write!(&mut self.buffer, ",")?;
+        Ok(())
+    }
+
+    fn end_seq(&mut self) -> Result<(), SerializeError> {
         write!(&mut self.buffer, "]")?;
         Ok(())
     }
@@ -639,6 +810,23 @@ fn de() {
 
     let mut de = JsonDeserializer::new("10");
     assert!(matches!(Month::deserialize(&mut de), Ok(Month::October)));
+
+    let mut de = JsonDeserializer::new("[1,2,4,8]");
+    assert!(matches!(Vec::<i32>::deserialize(&mut de), Ok(ref s) if s == &[1, 2, 4, 8]));
+
+    let mut de = JsonDeserializer::new("[1,2,4,8,]");
+    assert!(matches!(Vec::<i32>::deserialize(&mut de), Ok(ref s) if s == &[1, 2, 4, 8]));
+
+    let mut de = JsonDeserializer::new("[1]");
+    assert!(matches!(Vec::<i32>::deserialize(&mut de), Ok(ref s) if s == &[1]));
+
+    let mut de = JsonDeserializer::new("[1,null,2,null]");
+    assert!(
+        matches!(Vec::<Option<i32>>::deserialize(&mut de), Ok(ref s) if s == &[Some(1), None, Some(2), None])
+    );
+
+    let mut de = JsonDeserializer::new("[]");
+    assert!(matches!(Vec::<i32>::deserialize(&mut de), Ok(ref s) if s == &[]));
 }
 
 fn main() {
@@ -655,7 +843,7 @@ fn main() {
         pets: vec!["Bouboul".to_owned(), "Monsieur Puppy".to_owned()],
     };
 
-    let mut serializer = PrettyJsonSerializer::default();
+    let mut serializer = JsonSerializer::default();
     stuff.serialize(&mut serializer).unwrap();
     println!("{}", serializer.buffer);
 
