@@ -1,4 +1,4 @@
-pub(crate) const fn check_unique_ids(ids: &[u32]) -> bool {
+pub const fn check_unique_ids(ids: &[u32]) -> bool {
     let mut i = 0;
     while i < ids.len() {
         let mut count = 0;
@@ -47,7 +47,7 @@ macro_rules! serde {
 
         impl $crate::ser::Serialize for $name {
             fn serialize(&self, serializer: &mut dyn $crate::ser::Serializer) -> Result<(), $crate::ser::SerializeError> {
-                const_assert!($name::check_unique_ids());
+                $crate::const_assert!($name::check_unique_ids());
                 serializer.start_struct()?;
                 $(
                     serializer.serialize_struct_field($id, stringify!($field), &self.$field)?;
@@ -111,12 +111,14 @@ macro_rules! serde {
                     }
                 }
 
-                impl $crate::de::Visitor for $crate::de::Place<$name> {
+                $crate::make_place_type!(Place);
+
+                impl $crate::de::Visitor for Place<$name> {
                     fn visit_struct<'a>(&'a mut self) -> Result<Box<dyn $crate::de::StructBuilder + 'a>, $crate::de::DeserializeError> {
                         Ok(Box::new(Builder::new(&mut self.out)))
                     }
                 }
-                return $crate::de::Place::new(out);
+                return Place::new(out);
             }
         }
     };
@@ -148,7 +150,7 @@ macro_rules! serde {
 
         impl $crate::ser::Serialize for $name {
             fn serialize(&self, serializer: &mut dyn $crate::ser::Serializer) -> Result<(), $crate::ser::SerializeError> {
-                const_assert!($name::check_unique_ids());
+                $crate::const_assert!($name::check_unique_ids());
                 match *self {
                     $(
                         Self::$variant => serializer.serialize_enum($id, stringify!($variant))?,
@@ -160,7 +162,9 @@ macro_rules! serde {
 
         impl $crate::de::Deserialize for $name {
             fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn $crate::de::Visitor {
-                impl $crate::de::Visitor for $crate::de::Place<$name> {
+                $crate::make_place_type!(Place);
+
+                impl $crate::de::Visitor for Place<$name> {
                     fn visit_str(&mut self, value: &str) -> Result<(), $crate::de::DeserializeError> {
                         let (id, name) = if let Some(colon_index) = value.find(':') {
                             let id = value[..colon_index].parse::<i64>().ok();
@@ -227,7 +231,7 @@ macro_rules! serde {
                         }
                     }
                 }
-                return $crate::de::Place::new(out);
+                return Place::new(out);
             }
         }
     }

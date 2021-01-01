@@ -1,10 +1,7 @@
-mod const_assert;
-mod de;
-mod macros;
-mod ser;
+use serde::de::*;
+use serde::ser::*;
+use serde::serde;
 
-use de::*;
-use ser::*;
 use std::fmt::Write;
 use std::iter::{Enumerate, Peekable};
 use std::ops::Range;
@@ -443,7 +440,7 @@ serde! {
 serde! {
     #[derive(Debug, PartialEq)]
     struct Date {
-        day: u32 = 1,
+        day: u8 = 1,
         month: Month = 2,
         year: u32 = 3,
     }
@@ -453,17 +450,16 @@ serde! {
     #[derive(Debug, PartialEq)]
     struct Person {
         name: String = 1,
-        age: i32 = 2,
+        age: i16 = 2,
         birth_date: Date = 3,
         pets: Vec<String> = 4,
         height: Option<f32> = 5,
-        weight: Option<f32> = 88,
+        weight: Option<f64> = 88,
         is_cool: bool = 6,
     }
 }
 
-#[test]
-fn de() {
+fn de_tests() {
     let mut de = JsonDeserializer::new("123");
     assert_eq!(i32::deserialize(&mut de), Ok(123));
 
@@ -586,5 +582,10 @@ fn main() {
     println!("{}", serializer.buffer);
 
     let mut de = JsonDeserializer::new(&serializer.buffer);
-    assert_eq!(Person::deserialize(&mut de), Ok(stuff));
+    let a = Person::deserialize(&mut de);
+    assert_eq!(a, Ok(stuff));
+
+    println!("{:#?}", a);
+
+    de_tests();
 }

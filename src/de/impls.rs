@@ -1,109 +1,139 @@
-use super::{Deserialize, DeserializeError, Place, SeqBuilder, Visitor};
+use super::{Deserialize, DeserializeError, SeqBuilder, Visitor};
+use crate::make_place_type;
 
-impl Deserialize for i32 {
-    fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn Visitor {
-        impl Visitor for Place<i32> {
-            fn visit_signed(&mut self, value: i64) -> Result<(), DeserializeError> {
-                if value < std::i32::MIN as i64 || value > std::i32::MAX as i64 {
-                    return Err(DeserializeError::IncompatibleNumericType);
-                } else {
-                    self.out.replace(value as i32);
-                    Ok(())
+make_place_type!(Place);
+
+macro_rules! deserialize_signed {
+    ($type:ty, $min:path, $max:path) => {
+        impl Deserialize for $type {
+            fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn Visitor {
+                impl Visitor for Place<$type> {
+                    fn visit_signed(&mut self, value: i64) -> Result<(), DeserializeError> {
+                        if value < $min as i64 || value > $max as i64 {
+                            return Err(DeserializeError::IncompatibleNumericType);
+                        } else {
+                            self.out.replace(value as $type);
+                            Ok(())
+                        }
+                    }
+
+                    fn visit_unsigned(&mut self, value: u64) -> Result<(), DeserializeError> {
+                        if value > $max as u64 {
+                            return Err(DeserializeError::IncompatibleNumericType);
+                        } else {
+                            self.out.replace(value as $type);
+                            Ok(())
+                        }
+                    }
+
+                    fn visit_float(&mut self, value: f64) -> Result<(), DeserializeError> {
+                        if value < $min as f64 || value > $max as f64 {
+                            return Err(DeserializeError::IncompatibleNumericType);
+                        } else {
+                            self.out.replace(value as $type);
+                            Ok(())
+                        }
+                    }
+
+                    fn visit_bool(&mut self, value: bool) -> Result<(), DeserializeError> {
+                        self.out.replace(if value { 1 } else { 0 });
+                        Ok(())
+                    }
                 }
-            }
-
-            fn visit_unsigned(&mut self, value: u64) -> Result<(), DeserializeError> {
-                if value > std::i32::MAX as u64 {
-                    return Err(DeserializeError::IncompatibleNumericType);
-                } else {
-                    self.out.replace(value as i32);
-                    Ok(())
-                }
-            }
-
-            fn visit_float(&mut self, value: f64) -> Result<(), DeserializeError> {
-                if value < std::i32::MIN as f64 || value > std::i32::MAX as f64 {
-                    return Err(DeserializeError::IncompatibleNumericType);
-                } else {
-                    self.out.replace(value as i32);
-                    Ok(())
-                }
-            }
-
-            fn visit_bool(&mut self, value: bool) -> Result<(), DeserializeError> {
-                self.out.replace(if value { 1 } else { 0 });
-                Ok(())
+                return Place::new(out);
             }
         }
-        return Place::new(out);
-    }
+    };
 }
 
-impl Deserialize for u32 {
-    fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn Visitor {
-        impl Visitor for Place<u32> {
-            fn visit_signed(&mut self, value: i64) -> Result<(), DeserializeError> {
-                if value < 0 || value > std::u32::MAX as i64 {
-                    return Err(DeserializeError::IncompatibleNumericType);
-                } else {
-                    self.out.replace(value as u32);
-                    Ok(())
-                }
-            }
+deserialize_signed!(i8, std::i8::MIN, std::i8::MAX);
+deserialize_signed!(i16, std::i16::MIN, std::i16::MAX);
+deserialize_signed!(i32, std::i32::MIN, std::i32::MAX);
+deserialize_signed!(i64, std::i64::MIN, std::i64::MAX);
+deserialize_signed!(isize, std::isize::MIN, std::isize::MAX);
 
-            fn visit_unsigned(&mut self, value: u64) -> Result<(), DeserializeError> {
-                if value > std::u32::MAX as u64 {
-                    return Err(DeserializeError::IncompatibleNumericType);
-                } else {
-                    self.out.replace(value as u32);
-                    Ok(())
-                }
-            }
+macro_rules! deserialize_unsigned {
+    ($type:ty, $max:path) => {
+        impl Deserialize for $type {
+            fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn Visitor {
+                impl Visitor for Place<$type> {
+                    fn visit_signed(&mut self, value: i64) -> Result<(), DeserializeError> {
+                        if value < 0 || value > $max as i64 {
+                            return Err(DeserializeError::IncompatibleNumericType);
+                        } else {
+                            self.out.replace(value as $type);
+                            Ok(())
+                        }
+                    }
 
-            fn visit_float(&mut self, value: f64) -> Result<(), DeserializeError> {
-                if value < 0.0 || value > std::u32::MAX as f64 {
-                    return Err(DeserializeError::IncompatibleNumericType);
-                } else {
-                    self.out.replace(value as u32);
-                    Ok(())
-                }
-            }
+                    fn visit_unsigned(&mut self, value: u64) -> Result<(), DeserializeError> {
+                        if value > $max as u64 {
+                            return Err(DeserializeError::IncompatibleNumericType);
+                        } else {
+                            self.out.replace(value as $type);
+                            Ok(())
+                        }
+                    }
 
-            fn visit_bool(&mut self, value: bool) -> Result<(), DeserializeError> {
-                self.out.replace(if value { 1 } else { 0 });
-                Ok(())
+                    fn visit_float(&mut self, value: f64) -> Result<(), DeserializeError> {
+                        if value < 0.0 || value > $max as f64 {
+                            return Err(DeserializeError::IncompatibleNumericType);
+                        } else {
+                            self.out.replace(value as $type);
+                            Ok(())
+                        }
+                    }
+
+                    fn visit_bool(&mut self, value: bool) -> Result<(), DeserializeError> {
+                        self.out.replace(if value { 1 } else { 0 });
+                        Ok(())
+                    }
+                }
+                return Place::new(out);
             }
         }
-        return Place::new(out);
-    }
+    };
 }
 
-impl Deserialize for f32 {
-    fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn Visitor {
-        impl Visitor for Place<f32> {
-            fn visit_signed(&mut self, value: i64) -> Result<(), DeserializeError> {
-                self.out.replace(value as f32);
-                Ok(())
-            }
+deserialize_unsigned!(u8, std::u8::MAX);
+deserialize_unsigned!(u16, std::u16::MAX);
+deserialize_unsigned!(u32, std::u32::MAX);
+deserialize_unsigned!(u64, std::u64::MAX);
+deserialize_unsigned!(usize, std::usize::MAX);
 
-            fn visit_unsigned(&mut self, value: u64) -> Result<(), DeserializeError> {
-                self.out.replace(value as f32);
-                Ok(())
-            }
+macro_rules! deserialize_float {
+    ($type:ty) => {
+        impl Deserialize for $type {
+            fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn Visitor {
+                impl Visitor for Place<$type> {
+                    fn visit_signed(&mut self, value: i64) -> Result<(), DeserializeError> {
+                        self.out.replace(value as $type);
+                        Ok(())
+                    }
 
-            fn visit_float(&mut self, value: f64) -> Result<(), DeserializeError> {
-                self.out.replace(value as f32);
-                Ok(())
-            }
+                    fn visit_unsigned(&mut self, value: u64) -> Result<(), DeserializeError> {
+                        self.out.replace(value as $type);
+                        Ok(())
+                    }
 
-            fn visit_bool(&mut self, value: bool) -> Result<(), DeserializeError> {
-                self.out.replace(if value { 1.0 } else { 0.0 });
-                Ok(())
+                    fn visit_float(&mut self, value: f64) -> Result<(), DeserializeError> {
+                        self.out.replace(value as $type);
+                        Ok(())
+                    }
+
+                    fn visit_bool(&mut self, value: bool) -> Result<(), DeserializeError> {
+                        self.out.replace(if value { 1.0 } else { 0.0 });
+                        Ok(())
+                    }
+                }
+                return Place::new(out);
             }
         }
-        return Place::new(out);
-    }
+    };
 }
+
+deserialize_float!(f32);
+deserialize_float!(f64);
 
 impl<T: Deserialize> Deserialize for Option<T> {
     fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn Visitor {

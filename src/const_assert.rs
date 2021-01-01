@@ -28,6 +28,6 @@ macro_rules! to_bool {
 #[macro_export]
 macro_rules! const_assert {
     ($x:expr) => {
-        const _: $crate::const_assert::True = to_bool!($x);
+        const _: $crate::const_assert::True = $crate::to_bool!($x);
     };
 }
