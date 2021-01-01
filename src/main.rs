@@ -23,6 +23,7 @@ enum DeserializeError {
     UnimplementedVisit,
     IncompatibleNumericType,
     UnexpectedEof,
+    UnknownEnumVariant,
 }
 
 trait Visitor {
@@ -629,6 +630,15 @@ fn de() {
 
     let mut de = JsonDeserializer::new("\"\"");
     assert!(matches!(String::deserialize(&mut de), Ok(ref s) if s == ""));
+
+    let mut de = JsonDeserializer::new("\"10:October\"");
+    assert!(matches!(Month::deserialize(&mut de), Ok(Month::October)));
+
+    let mut de = JsonDeserializer::new("\"October\"");
+    assert!(matches!(Month::deserialize(&mut de), Ok(Month::October)));
+
+    let mut de = JsonDeserializer::new("10");
+    assert!(matches!(Month::deserialize(&mut de), Ok(Month::October)));
 }
 
 fn main() {

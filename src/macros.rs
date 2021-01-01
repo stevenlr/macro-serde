@@ -45,8 +45,8 @@ macro_rules! serde {
             }
         }
 
-        impl Serialize for $name {
-            fn serialize(&self, serializer: &mut dyn Serializer) -> Result<(), SerializeError> {
+        impl $crate::ser::Serialize for $name {
+            fn serialize(&self, serializer: &mut dyn $crate::ser::Serializer) -> Result<(), $crate::ser::SerializeError> {
                 const_assert!($name::check_unique_ids());
                 serializer.start_struct()?;
                 $(
@@ -83,8 +83,8 @@ macro_rules! serde {
             }
         }
 
-        impl Serialize for $name {
-            fn serialize(&self, serializer: &mut dyn Serializer) -> Result<(), SerializeError> {
+        impl $crate::ser::Serialize for $name {
+            fn serialize(&self, serializer: &mut dyn $crate::ser::Serializer) -> Result<(), $crate::ser::SerializeError> {
                 const_assert!($name::check_unique_ids());
                 match *self {
                     $(
@@ -92,6 +92,79 @@ macro_rules! serde {
                     )+
                 }
                 Ok(())
+            }
+        }
+
+        impl $crate::Deserialize for $name {
+            fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn $crate::Visitor {
+                impl $crate::Visitor for $crate::Place<$name> {
+                    fn visit_str(&mut self, value: &str) -> Result<(), $crate::DeserializeError> {
+                        let (id, name) = if let Some(colon_index) = value.find(':') {
+                            let id = value[..colon_index].parse::<i64>().ok();
+                            let name = &value[(colon_index + 1)..];
+                            (id, name)
+                        }
+                        else {
+                            (None, value)
+                        };
+
+                        if let Some(id) = id {
+                            let variant = match id {
+                                $(
+                                    $id => Some($name::$variant),
+                                )+
+                                _ => None,
+                            };
+
+                            if let Some(variant) = variant {
+                                self.out.replace(variant);
+                                return Ok(());
+                            }
+                        }
+
+                        let variant = match name {
+                            $(
+                                stringify!($variant) => Some($name::$variant),
+                            )+
+                            _ => None,
+                        };
+
+                        if let Some(variant) = variant {
+                            self.out.replace(variant);
+                            return Ok(());
+                        }
+                        else {
+                            return Err($crate::DeserializeError::UnknownEnumVariant);
+                        }
+                    }
+
+                    fn visit_signed(&mut self, value: i64) -> Result<(), $crate::DeserializeError> {
+                        if value < 0 {
+                            Err($crate::DeserializeError::UnknownEnumVariant)
+                        }
+                        else {
+                            self.visit_unsigned(value as u64)
+                        }
+                    }
+
+                    fn visit_unsigned(&mut self, value: u64) -> Result<(), $crate::DeserializeError> {
+                        let variant = match value {
+                            $(
+                                $id => Some($name::$variant),
+                            )+
+                            _ => None,
+                        };
+
+                        if let Some(variant) = variant {
+                            self.out.replace(variant);
+                            return Ok(());
+                        }
+                        else {
+                            return Err($crate::DeserializeError::UnknownEnumVariant);
+                        }
+                    }
+                }
+                return Place::new(out);
             }
         }
     }
