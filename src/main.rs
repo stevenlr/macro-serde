@@ -5,6 +5,7 @@ mod ser;
 use ser::*;
 use std::fmt::Write;
 use std::iter::{Enumerate, Peekable};
+use std::ops::Range;
 use std::str::Chars;
 
 struct Place<T> {
@@ -25,10 +26,21 @@ enum DeserializeError {
     UnexpectedEof,
     UnknownEnumVariant,
     ParsingError,
+    MissingField(&'static str),
+    UnknownField,
 }
 
 trait SeqBuilder {
     fn element(&mut self) -> Result<&mut dyn Visitor, DeserializeError>;
+    fn finish(&mut self) -> Result<(), DeserializeError>;
+}
+
+trait StructBuilder {
+    fn member(
+        &mut self,
+        id: Option<u64>,
+        name: Option<&str>,
+    ) -> Result<&mut dyn Visitor, DeserializeError>;
     fn finish(&mut self) -> Result<(), DeserializeError>;
 }
 
@@ -61,6 +73,10 @@ trait Visitor {
         &'a mut self,
         _size_hint: Option<usize>,
     ) -> Result<Box<dyn SeqBuilder + 'a>, DeserializeError> {
+        Err(DeserializeError::UnimplementedVisit)
+    }
+
+    fn visit_struct<'a>(&'a mut self) -> Result<Box<dyn StructBuilder + 'a>, DeserializeError> {
         Err(DeserializeError::UnimplementedVisit)
     }
 }
@@ -441,7 +457,7 @@ impl<'a> JsonDeserializer<'a> {
         }
     }
 
-    fn parse_str(&mut self, visitor: &mut dyn Visitor) -> Result<(), DeserializeError> {
+    fn parse_str_ref(&mut self) -> Result<Range<usize>, DeserializeError> {
         let first_index = match self.iter.next() {
             Some((i, '"')) => i + 1,
             _ => return Err(DeserializeError::ParsingError),
@@ -457,7 +473,11 @@ impl<'a> JsonDeserializer<'a> {
             }
         };
 
-        visitor.visit_str(&self.data[first_index..last_index])?;
+        return Ok(first_index..last_index);
+    }
+
+    fn parse_str(&mut self, visitor: &mut dyn Visitor) -> Result<(), DeserializeError> {
+        visitor.visit_str(&self.data[self.parse_str_ref()?])?;
         Ok(())
     }
 
@@ -483,6 +503,48 @@ impl<'a> JsonDeserializer<'a> {
             }
         }
     }
+
+    fn parse_field_name(&mut self) -> Result<(Option<u64>, Range<usize>), DeserializeError> {
+        let range = self.parse_str_ref()?;
+        let s = &self.data[range.clone()];
+        if let Some(index) = s.find(':') {
+            let id = self.data[range.start..(range.start + index)]
+                .parse::<u64>()
+                .ok();
+            return Ok((id, (range.start + index + 1)..range.end));
+        } else {
+            return Ok((None, range));
+        }
+    }
+
+    fn parse_struct(&mut self, visitor: &mut dyn Visitor) -> Result<(), DeserializeError> {
+        self.iter.next();
+
+        let mut struc = visitor.visit_struct()?;
+
+        loop {
+            if self.peek_char() == Some('}') {
+                self.iter.next();
+                return struc.finish();
+            }
+
+            let (id, name_range) = self.parse_field_name()?;
+
+            if self.next_char() != Some(':') {
+                return Err(DeserializeError::ParsingError);
+            }
+
+            self.deserialize(struc.member(id, Some(&self.data[name_range]))?)?;
+
+            match self.peek_char() {
+                Some(',') => {
+                    self.next_char();
+                }
+                Some('}') => {}
+                _ => return Err(DeserializeError::ParsingError),
+            }
+        }
+    }
 }
 
 impl<'a> Deserializer for JsonDeserializer<'a> {
@@ -494,6 +556,7 @@ impl<'a> Deserializer for JsonDeserializer<'a> {
             Some('f') => self.parse_false(visitor),
             Some('"') => self.parse_str(visitor),
             Some('[') => self.parse_sequence(visitor),
+            Some('{') => self.parse_struct(visitor),
             Some(_) => Err(DeserializeError::ParsingError),
             None => Err(DeserializeError::UnexpectedEof),
         }
@@ -687,7 +750,7 @@ impl Serializer for JsonSerializer {
 }
 
 serde! {
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq)]
     enum Month {
         January = 1,
         February = 2,
@@ -705,7 +768,7 @@ serde! {
 }
 
 serde! {
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq)]
     struct Date {
         day: u32 = 1,
         month: Month = 2,
@@ -714,13 +777,14 @@ serde! {
 }
 
 serde! {
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq)]
     struct Person {
         name: String = 1,
         age: i32 = 2,
         birth_date: Date = 3,
         pets: Vec<String> = 4,
-        height: f32 = 5,
+        height: Option<f32> = 5,
+        weight: Option<f32> = 88,
         is_cool: bool = 6,
     }
 }
@@ -833,7 +897,8 @@ fn main() {
     let stuff = Person {
         name: "Steven".to_owned(),
         age: 27,
-        height: 1.735,
+        height: Some(1.735),
+        weight: None,
         is_cool: true,
         birth_date: Date {
             day: 19,
@@ -847,6 +912,6 @@ fn main() {
     stuff.serialize(&mut serializer).unwrap();
     println!("{}", serializer.buffer);
 
-    let mut de = JsonDeserializer::new("123");
-    assert_eq!(i32::deserialize(&mut de), Ok(123));
+    let mut de = JsonDeserializer::new(&serializer.buffer);
+    assert_eq!(Person::deserialize(&mut de), Ok(stuff));
 }

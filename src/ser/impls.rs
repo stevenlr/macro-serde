@@ -55,6 +55,15 @@ impl Serialize for bool {
     }
 }
 
+impl<T: Serialize> Serialize for Option<T> {
+    fn serialize(&self, serializer: &mut dyn Serializer) -> Result<(), SerializeError> {
+        match self {
+            Some(s) => s.serialize(serializer),
+            None => serializer.serialize_null(),
+        }
+    }
+}
+
 impl Serialize for String {
     fn serialize(&self, serializer: &mut dyn Serializer) -> Result<(), SerializeError> {
         serializer.serialize_str(self.as_ref())?;

@@ -56,6 +56,69 @@ macro_rules! serde {
                 Ok(())
             }
         }
+
+        impl $crate::Deserialize for $name {
+            fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn $crate::Visitor {
+                struct Builder<'a> {
+                    deserialize_out_place: &'a mut Option<$name>,
+                    $(
+                        $field: Option<$type>,
+                    )+
+                }
+
+                impl<'a> Builder<'a> {
+                    fn new(out: &'a mut Option<$name>) -> Self {
+                        Self {
+                            deserialize_out_place: out,
+                            $(
+                                $field: None,
+                            )+
+                        }
+                    }
+                }
+
+                impl<'a> $crate::StructBuilder for Builder<'a> {
+                    fn member(&mut self, id: Option<u64>, name: Option<&str>) -> Result<&mut dyn $crate::Visitor, $crate::DeserializeError> {
+                        if let Some(id) = id {
+                            match id {
+                                $(
+                                    $id => return Ok(<$type as $crate::Deserialize>::begin_deserialize(&mut self.$field)),
+                                )+
+                                _ => {},
+                            }
+                        }
+
+                        if let Some(name) = name {
+                            match name {
+                                $(
+                                    stringify!($field) => return Ok(<$type as $crate::Deserialize>::begin_deserialize(&mut self.$field)),
+                                )+
+                                _ => {},
+                            }
+                        }
+
+                        return Err($crate::DeserializeError::UnknownField);
+                    }
+
+                    fn finish(&mut self) -> Result<(), $crate::DeserializeError> {
+                        let result = $name {
+                            $(
+                                $field: self.$field.take().ok_or($crate::DeserializeError::MissingField(stringify!($field)))?,
+                            )+
+                        };
+                        self.deserialize_out_place.replace(result);
+                        Ok(())
+                    }
+                }
+
+                impl $crate::Visitor for Place<$name> {
+                    fn visit_struct<'a>(&'a mut self) -> Result<Box<dyn StructBuilder + 'a>, DeserializeError> {
+                        Ok(Box::new(Builder::new(&mut self.out)))
+                    }
+                }
+                return Place::new(out);
+            }
+        }
     };
     (
         $(
