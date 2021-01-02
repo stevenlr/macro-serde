@@ -174,12 +174,12 @@ impl<'a> JsonDeserializer<'a> {
         }
     }
 
-    fn parse_field_name(&mut self) -> Result<(Option<u64>, Range<usize>), DeserializeError> {
+    fn parse_field_name(&mut self) -> Result<(Option<u32>, Range<usize>), DeserializeError> {
         let range = self.parse_str_ref()?;
         let s = &self.data[range.clone()];
         if let Some(index) = s.find(':') {
             let id = self.data[range.start..(range.start + index)]
-                .parse::<u64>()
+                .parse::<u32>()
                 .ok();
             return Ok((id, (range.start + index + 1)..range.end));
         } else {
@@ -448,6 +448,14 @@ serde! {
 
 serde! {
     #[derive(Debug, PartialEq)]
+    union Occupation {
+        Unemployed(i32) = 1,
+        Employed(String) = 2,
+    }
+}
+
+serde! {
+    #[derive(Debug, PartialEq)]
     struct Person {
         name: String = 1,
         age: i16 = 2,
@@ -456,6 +464,7 @@ serde! {
         height: Option<f32> = 5,
         weight: Option<f64> = 88,
         is_cool: bool = 6,
+        occupation: Occupation = 7,
     }
 }
 
@@ -575,7 +584,12 @@ fn main() {
             year: 1993,
         },
         pets: vec!["Bouboul".to_owned(), "Monsieur Puppy".to_owned()],
+        occupation: Occupation::Employed("Engineer".to_owned()),
     };
+
+    let mut serializer = PrettyJsonSerializer::default();
+    stuff.serialize(&mut serializer).unwrap();
+    println!("{}", serializer.buffer);
 
     let mut serializer = JsonSerializer::default();
     stuff.serialize(&mut serializer).unwrap();

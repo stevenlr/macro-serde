@@ -5,6 +5,7 @@ pub enum DeserializeError {
     IncompatibleNumericType,
     UnexpectedEof,
     UnknownEnumVariant,
+    UnknownUnionVariant,
     ParsingError,
     MissingField(&'static str),
     UnknownField,
@@ -18,7 +19,7 @@ pub trait SeqBuilder {
 pub trait StructBuilder {
     fn member(
         &mut self,
-        id: Option<u64>,
+        id: Option<u32>,
         name: Option<&str>,
     ) -> Result<&mut dyn Visitor, DeserializeError>;
     fn finish(&mut self) -> Result<(), DeserializeError>;

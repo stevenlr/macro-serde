@@ -78,7 +78,7 @@ macro_rules! serde {
                 }
 
                 impl<'a> $crate::de::StructBuilder for Builder<'a> {
-                    fn member(&mut self, id: Option<u64>, name: Option<&str>) -> Result<&mut dyn $crate::de::Visitor, $crate::de::DeserializeError> {
+                    fn member(&mut self, id: Option<u32>, name: Option<&str>) -> Result<&mut dyn $crate::de::Visitor, $crate::de::DeserializeError> {
                         if let Some(id) = id {
                             match id {
                                 $(
@@ -234,5 +234,125 @@ macro_rules! serde {
                 return Place::new(out);
             }
         }
-    }
+    };
+    (
+        $(
+            #[$attrib:meta]
+        )*
+        $vis:vis union $name:ident {
+            $(
+                $variant:ident($type:ty) = $id:literal,
+            )+
+        }
+    ) => {
+        $(
+            #[$attrib]
+        )*
+        $vis enum $name {
+            $(
+                $variant($type),
+            )+
+        }
+
+        impl $name {
+            #[allow(unused)]
+            const fn check_unique_ids() -> bool {
+                $crate::macros::check_unique_ids(&[$($id),+])
+            }
+        }
+
+        impl $crate::ser::Serialize for $name {
+            fn serialize(&self, serializer: &mut dyn $crate::ser::Serializer) -> Result<(), $crate::ser::SerializeError> {
+                $crate::const_assert!($name::check_unique_ids());
+                match self {
+                    $(
+                        Self::$variant(val) => {
+                            serializer.start_struct()?;
+                            serializer.serialize_struct_field($id, stringify!($variant), val)?;
+                            serializer.end_struct()?;
+                        }
+                    )+
+                }
+                Ok(())
+            }
+        }
+
+        impl $crate::de::Deserialize for $name {
+            fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn $crate::de::Visitor {
+                $crate::make_place_type!(Place);
+
+                #[allow(non_snake_case)]
+                struct Builder<'a> {
+                    deserialize_out_place: &'a mut Option<$name>,
+                    deserialize_variant_id: Option<u32>,
+                    $(
+                        $variant: Option<$type>,
+                    )+
+                }
+
+                impl<'a> Builder<'a> {
+                    fn new(out: &'a mut Option<$name>) -> Self {
+                        Self {
+                            deserialize_out_place: out,
+                            deserialize_variant_id: None,
+                            $(
+                                $variant: None,
+                            )+
+                        }
+                    }
+                }
+
+                impl<'a> $crate::de::StructBuilder for Builder<'a> {
+                    fn member(
+                        &mut self,
+                        id: Option<u32>,
+                        name: Option<&str>,
+                    ) -> Result<&mut dyn $crate::de::Visitor, $crate::de::DeserializeError> {
+                        match id {
+                            $(
+                                Some($id) => {
+                                    self.deserialize_variant_id = Some($id);
+                                    return Ok(<$type as $crate::de::Deserialize>::begin_deserialize(&mut self.$variant));
+                                }
+                            )+
+                            _ => {},
+                        }
+
+                        match name {
+                            $(
+                                Some(stringify!($variant)) => {
+                                    self.deserialize_variant_id = Some($id);
+                                    return Ok(<$type as $crate::de::Deserialize>::begin_deserialize(&mut self.$variant));
+                                }
+                            )+
+                            _ => {},
+                        }
+
+                        Err($crate::de::DeserializeError::UnknownUnionVariant)
+                    }
+
+                    fn finish(&mut self) -> Result<(), $crate::de::DeserializeError> {
+                        match self.deserialize_variant_id {
+                            $(
+                                Some($id) if self.$variant.is_some() => {
+                                    self.deserialize_out_place.replace($name::$variant(self.$variant.take().unwrap()));
+                                    Ok(())
+                                }
+                            )+
+                            _ => Err($crate::de::DeserializeError::UnknownUnionVariant),
+                        }
+                    }
+                }
+
+
+                impl $crate::de::Visitor for Place<$name> {
+                    fn visit_struct<'a>(&'a mut self) -> Result<Box<dyn StructBuilder + 'a>, DeserializeError> {
+                        Ok(Box::new(Builder::new(&mut self.out)))
+                    }
+                }
+
+                return Place::new(out);
+            }
+        }
+    };
 }
