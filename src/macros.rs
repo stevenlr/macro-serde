@@ -19,13 +19,36 @@ pub const fn check_unique_ids(ids: &[u32]) -> bool {
 
 #[macro_export]
 macro_rules! serde {
+    (@rename $field:ident $field_name:literal) => { $field_name };
+    (@rename $field:ident) => { stringify!($field) };
     (
         $(
             #[$attrib:meta]
         )*
         $struct_vis:vis struct $name:ident {
             $(
-                $field_vis:vis $field:ident: $type:ty = $id:literal,
+                $field_vis:vis $field:ident: $type:ty = $id:literal $(@ $field_name:literal)?,
+            )+
+        }
+    ) => {
+        serde! {@inner
+            $(
+                #[$attrib]
+            )*
+            $struct_vis struct $name {
+                $(
+                    $field_vis $field: $type = $id @ serde!(@rename $field $($field_name)?),
+                )+
+            }
+        }
+    };
+    (@inner
+        $(
+            #[$attrib:meta]
+        )*
+        $struct_vis:vis struct $name:ident {
+            $(
+                $field_vis:vis $field:ident: $type:ty = $id:literal @ $field_name:expr,
             )+
         }
     ) => {
@@ -50,7 +73,7 @@ macro_rules! serde {
                 $crate::const_assert!($name::check_unique_ids());
                 serializer.start_struct()?;
                 $(
-                    serializer.serialize_struct_field($id, stringify!($field), &self.$field)?;
+                    serializer.serialize_struct_field($id, $field_name, &self.$field)?;
                 )+
                 serializer.end_struct()?;
                 Ok(())
@@ -91,7 +114,7 @@ macro_rules! serde {
                         if let Some(name) = name {
                             match name {
                                 $(
-                                    stringify!($field) => return Ok(<$type as $crate::de::Deserialize>::begin_deserialize(&mut self.$field)),
+                                    $field_name => return Ok(<$type as $crate::de::Deserialize>::begin_deserialize(&mut self.$field)),
                                 )+
                                 _ => {},
                             }
@@ -103,7 +126,7 @@ macro_rules! serde {
                     fn finish(&mut self) -> Result<(), $crate::de::DeserializeError> {
                         let result = $name {
                             $(
-                                $field: self.$field.take().ok_or($crate::de::DeserializeError::MissingField(stringify!($field)))?,
+                                $field: self.$field.take().ok_or($crate::de::DeserializeError::MissingField($field_name))?,
                             )+
                         };
                         self.deserialize_out_place.replace(result);
@@ -128,7 +151,28 @@ macro_rules! serde {
         )*
         $enum_vis:vis enum $name:ident {
             $(
-                $variant:ident = $id:literal,
+                $variant:ident = $id:literal $(@ $variant_name:literal)?,
+            )+
+        }
+    ) => {
+        serde! {@inner
+            $(
+                #[$attrib]
+            )*
+            $enum_vis enum $name {
+                $(
+                    $variant = $id @ serde!(@rename $variant $($variant_name)?),
+                )+
+            }
+        }
+    };
+    (@inner
+        $(
+            #[$attrib:meta]
+        )*
+        $enum_vis:vis enum $name:ident {
+            $(
+                $variant:ident = $id:literal @ $variant_name:expr,
             )+
         }
     ) => {
@@ -153,7 +197,7 @@ macro_rules! serde {
                 $crate::const_assert!($name::check_unique_ids());
                 match *self {
                     $(
-                        Self::$variant => serializer.serialize_enum($id, stringify!($variant))?,
+                        Self::$variant => serializer.serialize_enum($id, $variant_name)?,
                     )+
                 }
                 Ok(())
@@ -191,7 +235,7 @@ macro_rules! serde {
 
                         let variant = match name {
                             $(
-                                stringify!($variant) => Some($name::$variant),
+                                $variant_name => Some($name::$variant),
                             )+
                             _ => None,
                         };
@@ -249,7 +293,28 @@ macro_rules! serde {
         )*
         $vis:vis union $name:ident {
             $(
-                $variant:ident$(($type:ty))? = $id:literal,
+                $variant:ident$(($type:ty))? = $id:literal $(@ $variant_name:literal)?,
+            )+
+        }
+    ) => {
+        serde! {@inner
+            $(
+                #[$attrib]
+            )*
+            $vis union $name {
+                $(
+                    $variant$(($type))? = $id @ serde!(@rename $variant $($variant_name)?),
+                )+
+            }
+        }
+    };
+    (@inner
+        $(
+            #[$attrib:meta]
+        )*
+        $vis:vis union $name:ident {
+            $(
+                $variant:ident$(($type:ty))? = $id:literal @ $variant_name:expr,
             )+
         }
     ) => {
@@ -276,7 +341,7 @@ macro_rules! serde {
                     $(
                         serde!(@union_variant_val $variant $(val $type)?) => {
                             serializer.start_struct()?;
-                            serializer.serialize_struct_field($id, stringify!($variant), serde!(@union_variant_serialize $(val $type)?))?;
+                            serializer.serialize_struct_field($id, $variant_name, serde!(@union_variant_serialize $(val $type)?))?;
                             serializer.end_struct()?;
                         },
                     )+
@@ -328,7 +393,7 @@ macro_rules! serde {
 
                         match name {
                             $(
-                                Some(stringify!($variant)) => {
+                                Some($variant_name) => {
                                     self.deserialize_variant_id = Some($id);
                                     return Ok(<serde!(@union_variant_type $($type)?) as $crate::de::Deserialize>::begin_deserialize(&mut self.$variant));
                                 }

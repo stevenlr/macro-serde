@@ -422,18 +422,18 @@ impl Serializer for JsonSerializer {
 serde! {
     #[derive(Debug, PartialEq)]
     enum Month {
-        January = 1,
-        February = 2,
-        March = 3,
-        April = 4,
-        May = 5,
-        June = 6,
-        July = 7,
-        August = 8,
-        September = 9,
-        October = 10,
-        November = 11,
-        December = 12,
+        January = 1 @ "JAN",
+        February = 2 @ "FEB",
+        March = 3 @ "MAR",
+        April = 4 @ "APR",
+        May = 5 @ "MAY",
+        June = 6 @ "JUN",
+        July = 7 @ "JUL",
+        August = 8 @ "AUG",
+        September = 9 @ "SEP",
+        October = 10 @ "OCT",
+        November = 11 @ "NOV",
+        December = 12 @ "DEC",
     }
 }
 
@@ -450,7 +450,7 @@ serde! {
     #[derive(Debug, PartialEq)]
     union Occupation {
         Unemployed = 1,
-        Employed(String) = 2,
+        Employed(String) = 2 @ "hasJob",
     }
 }
 
@@ -462,8 +462,8 @@ serde! {
         birth_date: Date = 3,
         pets: Vec<String> = 4,
         height: Option<f32> = 5,
-        car_brand: Option<String> = 88,
-        is_cool: bool = 6,
+        car_brand: Option<String> = 88 @ "carBrand",
+        is_cool: bool = 6 @ "IsCool",
         occupation: Occupation = 7,
     }
 }
@@ -544,10 +544,10 @@ fn de_tests() {
     let mut de = JsonDeserializer::new("\"\"");
     assert!(matches!(String::deserialize(&mut de), Ok(ref s) if s == ""));
 
-    let mut de = JsonDeserializer::new("\"10:October\"");
+    let mut de = JsonDeserializer::new("\"10:OCT\"");
     assert!(matches!(Month::deserialize(&mut de), Ok(Month::October)));
 
-    let mut de = JsonDeserializer::new("\"October\"");
+    let mut de = JsonDeserializer::new("\"OCT\"");
     assert!(matches!(Month::deserialize(&mut de), Ok(Month::October)));
 
     let mut de = JsonDeserializer::new("10");
