@@ -235,13 +235,21 @@ macro_rules! serde {
             }
         }
     };
+    (@union_variant_type $type:ty) => { $type };
+    (@union_variant_type ) => { () };
+    (@union_variant_val $variant:ident $val:ident $type:ty) => { Self::$variant($val) };
+    (@union_variant_val $variant:ident ) => { Self::$variant };
+    (@union_variant_serialize $val:ident $type:ty) => { $val };
+    (@union_variant_serialize) => { &() };
+    (@union_variant_take $self:ident $name:ident $variant:ident $type:ty) => { $name::$variant($self.$variant.take().unwrap()) };
+    (@union_variant_take $self:ident $name:ident $variant:ident) => { $name::$variant };
     (
         $(
             #[$attrib:meta]
         )*
         $vis:vis union $name:ident {
             $(
-                $variant:ident($type:ty) = $id:literal,
+                $variant:ident$(($type:ty))? = $id:literal,
             )+
         }
     ) => {
@@ -250,7 +258,7 @@ macro_rules! serde {
         )*
         $vis enum $name {
             $(
-                $variant($type),
+                $variant$(($type))?,
             )+
         }
 
@@ -266,11 +274,11 @@ macro_rules! serde {
                 $crate::const_assert!($name::check_unique_ids());
                 match self {
                     $(
-                        Self::$variant(val) => {
+                        serde!(@union_variant_val $variant $(val $type)?) => {
                             serializer.start_struct()?;
-                            serializer.serialize_struct_field($id, stringify!($variant), val)?;
+                            serializer.serialize_struct_field($id, stringify!($variant), serde!(@union_variant_serialize $(val $type)?))?;
                             serializer.end_struct()?;
-                        }
+                        },
                     )+
                 }
                 Ok(())
@@ -286,7 +294,7 @@ macro_rules! serde {
                     deserialize_out_place: &'a mut Option<$name>,
                     deserialize_variant_id: Option<u32>,
                     $(
-                        $variant: Option<$type>,
+                        $variant: Option<serde!(@union_variant_type $($type)?)>,
                     )+
                 }
 
@@ -312,7 +320,7 @@ macro_rules! serde {
                             $(
                                 Some($id) => {
                                     self.deserialize_variant_id = Some($id);
-                                    return Ok(<$type as $crate::de::Deserialize>::begin_deserialize(&mut self.$variant));
+                                    return Ok(<serde!(@union_variant_type $($type)?) as $crate::de::Deserialize>::begin_deserialize(&mut self.$variant));
                                 }
                             )+
                             _ => {},
@@ -322,7 +330,7 @@ macro_rules! serde {
                             $(
                                 Some(stringify!($variant)) => {
                                     self.deserialize_variant_id = Some($id);
-                                    return Ok(<$type as $crate::de::Deserialize>::begin_deserialize(&mut self.$variant));
+                                    return Ok(<serde!(@union_variant_type $($type)?) as $crate::de::Deserialize>::begin_deserialize(&mut self.$variant));
                                 }
                             )+
                             _ => {},
@@ -335,7 +343,7 @@ macro_rules! serde {
                         match self.deserialize_variant_id {
                             $(
                                 Some($id) if self.$variant.is_some() => {
-                                    self.deserialize_out_place.replace($name::$variant(self.$variant.take().unwrap()));
+                                    self.deserialize_out_place.replace(serde!(@union_variant_take self $name $variant $($type)?));
                                     Ok(())
                                 }
                             )+

@@ -4,8 +4,7 @@ macro_rules! serialize_signed {
     ($ty:ty) => {
         impl Serialize for $ty {
             fn serialize(&self, serializer: &mut dyn Serializer) -> Result<(), SerializeError> {
-                serializer.serialize_signed(*self as i64)?;
-                Ok(())
+                serializer.serialize_signed(*self as i64)
             }
         }
     };
@@ -21,8 +20,7 @@ macro_rules! serialize_unsigned {
     ($ty:ty) => {
         impl Serialize for $ty {
             fn serialize(&self, serializer: &mut dyn Serializer) -> Result<(), SerializeError> {
-                serializer.serialize_unsigned(*self as u64)?;
-                Ok(())
+                serializer.serialize_unsigned(*self as u64)
             }
         }
     };
@@ -38,8 +36,7 @@ macro_rules! serialize_float {
     ($ty:ty) => {
         impl Serialize for $ty {
             fn serialize(&self, serializer: &mut dyn Serializer) -> Result<(), SerializeError> {
-                serializer.serialize_float(*self as f64)?;
-                Ok(())
+                serializer.serialize_float(*self as f64)
             }
         }
     };
@@ -50,8 +47,7 @@ serialize_float!(f64);
 
 impl Serialize for bool {
     fn serialize(&self, serializer: &mut dyn Serializer) -> Result<(), SerializeError> {
-        serializer.serialize_bool(*self)?;
-        Ok(())
+        serializer.serialize_bool(*self)
     }
 }
 
@@ -66,8 +62,7 @@ impl<T: Serialize> Serialize for Option<T> {
 
 impl Serialize for String {
     fn serialize(&self, serializer: &mut dyn Serializer) -> Result<(), SerializeError> {
-        serializer.serialize_str(self.as_ref())?;
-        Ok(())
+        serializer.serialize_str(self.as_ref())
     }
 }
 
@@ -77,8 +72,13 @@ impl<T: Serialize> Serialize for Vec<T> {
         for elmt in self.iter() {
             serializer.serialize_seq_elmt(elmt)?;
         }
-        serializer.end_seq()?;
-        Ok(())
+        serializer.end_seq()
+    }
+}
+
+impl Serialize for () {
+    fn serialize(&self, serializer: &mut dyn Serializer) -> Result<(), SerializeError> {
+        serializer.serialize_null()
     }
 }
 

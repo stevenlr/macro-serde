@@ -271,3 +271,15 @@ impl<T: Deserialize> Deserialize for Vec<T> {
         return Place::new(out);
     }
 }
+
+impl Deserialize for () {
+    fn begin_deserialize(out: &mut Option<Self>) -> &mut dyn Visitor {
+        impl Visitor for Place<()> {
+            fn visit_null(&mut self) -> Result<(), DeserializeError> {
+                self.out.replace(());
+                Ok(())
+            }
+        }
+        return Place::new(out);
+    }
+}

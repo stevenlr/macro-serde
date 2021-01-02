@@ -449,7 +449,7 @@ serde! {
 serde! {
     #[derive(Debug, PartialEq)]
     union Occupation {
-        Unemployed(i32) = 1,
+        Unemployed = 1,
         Employed(String) = 2,
     }
 }
@@ -462,7 +462,7 @@ serde! {
         birth_date: Date = 3,
         pets: Vec<String> = 4,
         height: Option<f32> = 5,
-        weight: Option<f64> = 88,
+        car_brand: Option<String> = 88,
         is_cool: bool = 6,
         occupation: Occupation = 7,
     }
@@ -576,7 +576,7 @@ fn main() {
         name: "Steven".to_owned(),
         age: 27,
         height: Some(1.735),
-        weight: None,
+        car_brand: None,
         is_cool: true,
         birth_date: Date {
             day: 19,
