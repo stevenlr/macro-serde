@@ -156,19 +156,22 @@ impl<'a> JsonDeserializer<'a> {
 
         let mut seq = visitor.visit_seq(None)?;
 
-        loop {
-            if self.peek_char() == Some(']') {
-                self.iter.next();
-                return seq.finish();
-            }
+        if self.peek_char() == Some(']') {
+            self.next_char();
+            return seq.finish();
+        }
 
+        loop {
             self.deserialize(seq.element()?)?;
 
             match self.peek_char() {
                 Some(',') => {
                     self.next_char();
                 }
-                Some(']') => {}
+                Some(']') => {
+                    self.next_char();
+                    return seq.finish();
+                }
                 _ => return Err(DeserializeError::ParsingError),
             }
         }
@@ -192,12 +195,12 @@ impl<'a> JsonDeserializer<'a> {
 
         let mut struc = visitor.visit_struct()?;
 
-        loop {
-            if self.peek_char() == Some('}') {
-                self.iter.next();
-                return struc.finish();
-            }
+        if self.peek_char() == Some('}') {
+            self.next_char();
+            return struc.finish();
+        }
 
+        loop {
             let (id, name_range) = self.parse_field_name()?;
 
             if self.next_char() != Some(':') {
@@ -210,7 +213,10 @@ impl<'a> JsonDeserializer<'a> {
                 Some(',') => {
                     self.next_char();
                 }
-                Some('}') => {}
+                Some('}') => {
+                    self.next_char();
+                    return struc.finish();
+                }
                 _ => return Err(DeserializeError::ParsingError),
             }
         }
@@ -237,6 +243,7 @@ impl<'a> Deserializer for JsonDeserializer<'a> {
 struct PrettyJsonSerializer {
     indent_level: usize,
     buffer: String,
+    sequence_firsts: Vec<bool>,
 }
 
 impl PrettyJsonSerializer {
@@ -291,6 +298,7 @@ impl Serializer for PrettyJsonSerializer {
     fn start_struct(&mut self) -> Result<(), SerializeError> {
         writeln!(&mut self.buffer, "{{")?;
         self.indent_level += 1;
+        self.sequence_firsts.push(true);
         Ok(())
     }
 
@@ -300,37 +308,48 @@ impl Serializer for PrettyJsonSerializer {
         field_name: &'static str,
         value: &dyn Serialize,
     ) -> Result<(), SerializeError> {
+        if self.sequence_firsts.last().copied() == Some(false) {
+            writeln!(&mut self.buffer, ",")?;
+        }
+        *self.sequence_firsts.last_mut().unwrap() = false;
         self.print_indent()?;
         write!(&mut self.buffer, "\"{}:{}\": ", field_id, field_name)?;
         value.serialize(self)?;
-        writeln!(&mut self.buffer, ",")?;
         Ok(())
     }
 
     fn end_struct(&mut self) -> Result<(), SerializeError> {
+        writeln!(&mut self.buffer, "")?;
         self.indent_level -= 1;
         self.print_indent()?;
         write!(&mut self.buffer, "}}")?;
+        self.sequence_firsts.pop();
         Ok(())
     }
 
     fn start_seq(&mut self, _len: usize) -> Result<(), SerializeError> {
         writeln!(&mut self.buffer, "[")?;
         self.indent_level += 1;
+        self.sequence_firsts.push(true);
         Ok(())
     }
 
     fn serialize_seq_elmt(&mut self, value: &dyn Serialize) -> Result<(), SerializeError> {
+        if self.sequence_firsts.last().copied() == Some(false) {
+            writeln!(&mut self.buffer, ",")?;
+        }
+        *self.sequence_firsts.last_mut().unwrap() = false;
         self.print_indent()?;
         value.serialize(self)?;
-        writeln!(&mut self.buffer, ",")?;
         Ok(())
     }
 
     fn end_seq(&mut self) -> Result<(), SerializeError> {
+        writeln!(&mut self.buffer, "")?;
         self.indent_level -= 1;
         self.print_indent()?;
         write!(&mut self.buffer, "]")?;
+        self.sequence_firsts.pop();
         Ok(())
     }
 }
@@ -338,6 +357,7 @@ impl Serializer for PrettyJsonSerializer {
 #[derive(Default)]
 struct JsonSerializer {
     buffer: String,
+    sequence_firsts: Vec<bool>,
 }
 
 impl Serializer for JsonSerializer {
@@ -382,6 +402,7 @@ impl Serializer for JsonSerializer {
 
     fn start_struct(&mut self) -> Result<(), SerializeError> {
         write!(&mut self.buffer, "{{")?;
+        self.sequence_firsts.push(true);
         Ok(())
     }
 
@@ -391,30 +412,40 @@ impl Serializer for JsonSerializer {
         field_name: &'static str,
         value: &dyn Serialize,
     ) -> Result<(), SerializeError> {
+        if self.sequence_firsts.last().copied() == Some(false) {
+            write!(&mut self.buffer, ",")?;
+        }
+        *self.sequence_firsts.last_mut().unwrap() = false;
+
         write!(&mut self.buffer, "\"{}:{}\":", field_id, field_name)?;
         value.serialize(self)?;
-        write!(&mut self.buffer, ",")?;
         Ok(())
     }
 
     fn end_struct(&mut self) -> Result<(), SerializeError> {
         write!(&mut self.buffer, "}}")?;
+        self.sequence_firsts.pop();
         Ok(())
     }
 
     fn start_seq(&mut self, _len: usize) -> Result<(), SerializeError> {
         write!(&mut self.buffer, "[")?;
+        self.sequence_firsts.push(true);
         Ok(())
     }
 
     fn serialize_seq_elmt(&mut self, value: &dyn Serialize) -> Result<(), SerializeError> {
+        if self.sequence_firsts.last().copied() == Some(false) {
+            write!(&mut self.buffer, ",")?;
+        }
+        *self.sequence_firsts.last_mut().unwrap() = false;
         value.serialize(self)?;
-        write!(&mut self.buffer, ",")?;
         Ok(())
     }
 
     fn end_seq(&mut self) -> Result<(), SerializeError> {
         write!(&mut self.buffer, "]")?;
+        self.sequence_firsts.pop();
         Ok(())
     }
 }
@@ -554,9 +585,6 @@ fn de_tests() {
     assert!(matches!(Month::deserialize(&mut de), Ok(Month::October)));
 
     let mut de = JsonDeserializer::new("[1,2,4,8]");
-    assert!(matches!(Vec::<i32>::deserialize(&mut de), Ok(ref s) if s == &[1, 2, 4, 8]));
-
-    let mut de = JsonDeserializer::new("[1,2,4,8,]");
     assert!(matches!(Vec::<i32>::deserialize(&mut de), Ok(ref s) if s == &[1, 2, 4, 8]));
 
     let mut de = JsonDeserializer::new("[1]");
