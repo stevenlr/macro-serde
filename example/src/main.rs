@@ -79,6 +79,14 @@ fn main() {
         occupation: Occupation::Employed("Engineer".to_owned()),
     };
 
+    let mut buffer = Vec::<u8>::new();
+    {
+        let mut ser = macroserde_msgpack::Serializer::new(&mut buffer);
+        stuff.serialize(&mut ser).unwrap();
+    }
+    println!("{:x?}", buffer);
+    /*
+
     let mut ser = macroserde_json::Serializer::new();
     stuff.serialize(&mut ser).unwrap();
 
@@ -94,5 +102,5 @@ fn main() {
 
     println!("{:#?}", person);
 
-    assert_eq!(person, stuff);
+    assert_eq!(person, stuff);*/
 }

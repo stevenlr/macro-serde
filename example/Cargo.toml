@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 macroserde = { path = "../macroserde" }
 macroserde-json = { path = "../macroserde-json" }
+macroserde-msgpack = { path = "../macroserde-msgpack" }

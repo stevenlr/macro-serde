@@ -6,6 +6,7 @@ version = "0.1.0"
 dependencies = [
  "macroserde",
  "macroserde-json",
+ "macroserde-msgpack",
 ]
 
 [[package]]
@@ -23,5 +24,12 @@ name = "macroserde-json"
 version = "0.1.0"
 dependencies = [
  "json",
+ "macroserde",
+]
+
+[[package]]
+name = "macroserde-msgpack"
+version = "0.1.0"
+dependencies = [
  "macroserde",
 ]

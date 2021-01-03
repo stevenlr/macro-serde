@@ -64,7 +64,7 @@ impl ser::Serializer for Serializer {
         Ok(())
     }
 
-    fn start_struct(&mut self) -> Result<(), ser::SerializeError> {
+    fn start_struct(&mut self, _len: usize) -> Result<(), ser::SerializeError> {
         self.stack.push(json::JsonValue::new_object());
         Ok(())
     }

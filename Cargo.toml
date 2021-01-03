@@ -3,5 +3,6 @@
 members = [
     "macroserde",
     "macroserde-json",
+    "macroserde-msgpack",
     "example",
 ]

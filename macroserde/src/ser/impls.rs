@@ -66,7 +66,23 @@ impl Serialize for String {
     }
 }
 
+impl Serialize for str {
+    fn serialize(&self, serializer: &mut dyn Serializer) -> Result<(), SerializeError> {
+        serializer.serialize_str(self)
+    }
+}
+
 impl<T: Serialize> Serialize for Vec<T> {
+    fn serialize(&self, serializer: &mut dyn Serializer) -> Result<(), SerializeError> {
+        serializer.start_seq(self.len())?;
+        for elmt in self.iter() {
+            serializer.serialize_seq_elmt(elmt)?;
+        }
+        serializer.end_seq()
+    }
+}
+
+impl<T: Serialize> Serialize for [T] {
     fn serialize(&self, serializer: &mut dyn Serializer) -> Result<(), SerializeError> {
         serializer.start_seq(self.len())?;
         for elmt in self.iter() {

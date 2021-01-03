@@ -62,16 +62,19 @@ macro_rules! macroserde {
         }
 
         impl $name {
+            const IDS: &'static [u32] = &[$($id),+];
+            const FIELD_COUNT: usize = Self::IDS.len();
+
             #[allow(unused)]
             const fn check_unique_ids() -> bool {
-                $crate::macros::check_unique_ids(&[$($id),+])
+                $crate::macros::check_unique_ids(Self::IDS)
             }
         }
 
         impl $crate::ser::Serialize for $name {
             fn serialize(&self, serializer: &mut dyn $crate::ser::Serializer) -> Result<(), $crate::ser::SerializeError> {
                 $crate::const_assert!($name::check_unique_ids());
-                serializer.start_struct()?;
+                serializer.start_struct(Self::FIELD_COUNT)?;
                 $(
                     serializer.serialize_struct_field($id, $field_name, &self.$field)?;
                 )+
@@ -329,9 +332,11 @@ macro_rules! macroserde {
         }
 
         impl $name {
+            const IDS: &'static [u32] = &[$($id),+];
+
             #[allow(unused)]
             const fn check_unique_ids() -> bool {
-                $crate::macros::check_unique_ids(&[$($id),+])
+                $crate::macros::check_unique_ids(Self::IDS)
             }
         }
 
@@ -341,7 +346,7 @@ macro_rules! macroserde {
                 match self {
                     $(
                         macroserde!(@union_variant_val $variant $(val $type)?) => {
-                            serializer.start_struct()?;
+                            serializer.start_struct(1)?;
                             serializer.serialize_struct_field($id, $variant_name, macroserde!(@union_variant_serialize $(val $type)?))?;
                             serializer.end_struct()?;
                         },
