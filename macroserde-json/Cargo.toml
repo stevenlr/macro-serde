@@ -1,8 +1,9 @@
 [package]
-name = "json_example"
+name = "macroserde-json"
 version = "0.1.0"
 authors = ["Steven Le Rouzic <steven.lerouzic@gmail.com>"]
 edition = "2018"
 
 [dependencies]
 macroserde = { path = "../macroserde" }
+json = "0.12"

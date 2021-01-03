@@ -2,5 +2,6 @@
 
 members = [
     "macroserde",
-    "json_example",
+    "macroserde-json",
+    "example",
 ]

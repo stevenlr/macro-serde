@@ -85,9 +85,10 @@ fn main() {
         occupation: Occupation::Employed("Engineer".to_owned()),
     };
 
-    let mut serializer = PrettyJsonSerializer::default();
-    stuff.serialize(&mut serializer).unwrap();
-    println!("{}", serializer.buffer);
+    let mut ser = macroserde_json::Serializer::new();
+    stuff.serialize(&mut ser).unwrap();
+
+    ser.write_pretty(&mut std::io::stdout(), 2).unwrap();
 }
 ```
 
@@ -96,23 +97,23 @@ The code above would produce:
 
 ```json
 {
-    "1:name": "Steven",
-    "2:age": 27,
-    "3:birth_date": {
-        "1:day": 19,
-        "2:month": "10:OCT",
-        "3:year": 1993,
-    },
-    "4:pets": [
-        "Bouboul",
-        "Monsieur Puppy",
-    ],
-    "5:height": 1.7350000143051147,
-    "88:carBrand": null,
-    "6:IsCool": true,
-    "7:occupation": {
-        "2:hasJob": "Engineer",
-    },
+  "1:name": "Steven",
+  "2:age": 27,
+  "3:birth_date": {
+    "1:day": 19,
+    "2:month": "10:OCT",
+    "3:year": 1993
+  },
+  "4:pets": [
+    "Bouboul",
+    "Monsieur Puppy"
+  ],
+  "5:height": 1.7350000143051148,
+  "88:carBrand": null,
+  "6:IsCool": true,
+  "7:occupation": {
+    "2:hasJob": "Engineer"
+  }
 }
 ```
 
@@ -120,6 +121,6 @@ Future work
 -----------------
 
 - Reserved IDs.
-- Proper JSON implementation.
+- Bytes value.
 - MessagePack implementation.
 - Improve compile-time ID unicity check error message. https://github.com/rust-lang/rust/issues/51999
