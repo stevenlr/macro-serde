@@ -8,7 +8,7 @@ Example
 -------------
 
 ```rust
-serde! {
+macroserde! {
     #[derive(Debug, PartialEq)]
     enum Month {
         January = 1 @ "JAN",
@@ -32,7 +32,7 @@ impl Default for Month {
     }
 }
 
-serde! {
+macroserde! {
     #[derive(Debug, PartialEq, Default)]
     struct Date {
         day: u8 = 1,
@@ -41,7 +41,7 @@ serde! {
     }
 }
 
-serde! {
+macroserde! {
     #[derive(Debug, PartialEq)]
     union Occupation {
         Unemployed = 1,
@@ -55,7 +55,7 @@ impl Default for Occupation {
     }
 }
 
-serde! {
+macroserde! {
     #[derive(Debug, PartialEq, Default)]
     struct Person {
         name: String = 1,
