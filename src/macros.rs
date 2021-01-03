@@ -124,11 +124,12 @@ macro_rules! serde {
                     }
 
                     fn finish(&mut self) -> Result<(), $crate::de::DeserializeError> {
-                        let result = $name {
-                            $(
-                                $field: self.$field.take().ok_or($crate::de::DeserializeError::MissingField($field_name))?,
-                            )+
-                        };
+                        let mut result = $name::default();
+                        $(
+                            if let Some(value) = self.$field.take(){
+                                result.$field = value;
+                            }
+                        )+
                         self.deserialize_out_place.replace(result);
                         Ok(())
                     }

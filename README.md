@@ -26,8 +26,14 @@ serde! {
     }
 }
 
+impl Default for Month {
+    fn default() -> Self {
+        Self::January
+    }
+}
+
 serde! {
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Default)]
     struct Date {
         day: u8 = 1,
         month: Month = 2,
@@ -43,8 +49,14 @@ serde! {
     }
 }
 
+impl Default for Occupation {
+    fn default() -> Self {
+        Self::Unemployed
+    }
+}
+
 serde! {
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Default)]
     struct Person {
         name: String = 1,
         age: i16 = 2,
@@ -108,7 +120,6 @@ Future work
 -----------------
 
 - Reserved IDs.
-- Default values.
 - Proper JSON implementation.
 - MessagePack implementation.
 - Improve compile-time ID unicity check error message. https://github.com/rust-lang/rust/issues/51999
