@@ -1,4 +1,6 @@
-#[derive(Debug, PartialEq)]
+use std::io;
+
+#[derive(Debug)]
 pub enum DeserializeError {
     UnknownError,
     UnimplementedVisit,
@@ -9,6 +11,7 @@ pub enum DeserializeError {
     ParsingError,
     MissingField(&'static str),
     UnknownField,
+    IoError(io::Error),
 }
 
 pub trait SeqBuilder {

@@ -1,6 +1,6 @@
-use macroserde::ser;
+use macroserde::{de, ser};
 use std::io;
-use std::io::Write;
+use std::io::{Read, Write};
 
 pub struct Serializer<W: io::Write> {
     write: io::BufWriter<W>,
@@ -170,5 +170,212 @@ impl<W: io::Write> ser::Serializer for Serializer<W> {
 
     fn end_seq(&mut self) -> Result<(), ser::SerializeError> {
         Ok(())
+    }
+}
+
+pub struct Deserializer<R: io::Read> {
+    read: io::BufReader<R>,
+}
+
+impl<R: io::Read> Deserializer<R> {
+    pub fn new(read: R) -> Self {
+        Self {
+            read: io::BufReader::new(read),
+        }
+    }
+
+    #[inline]
+    fn read_u8(&mut self) -> Result<u8, de::DeserializeError> {
+        let mut byte = [0];
+        self.read.read_exact(&mut byte)?;
+        return Ok(byte[0]);
+    }
+
+    #[inline]
+    fn read_u16(&mut self) -> Result<u16, de::DeserializeError> {
+        let mut byte = [0; 2];
+        self.read.read_exact(&mut byte)?;
+        Ok(u16::from_be_bytes(byte))
+    }
+
+    #[inline]
+    fn read_u32(&mut self) -> Result<u32, de::DeserializeError> {
+        let mut byte = [0; 4];
+        self.read.read_exact(&mut byte)?;
+        Ok(u32::from_be_bytes(byte))
+    }
+
+    #[inline]
+    fn read_u64(&mut self) -> Result<u64, de::DeserializeError> {
+        let mut byte = [0; 8];
+        self.read.read_exact(&mut byte)?;
+        Ok(u64::from_be_bytes(byte))
+    }
+
+    #[inline]
+    fn read_i8(&mut self) -> Result<i8, de::DeserializeError> {
+        let mut byte = [0];
+        self.read.read_exact(&mut byte)?;
+        return Ok(i8::from_be_bytes(byte));
+    }
+
+    #[inline]
+    fn read_i16(&mut self) -> Result<i16, de::DeserializeError> {
+        let mut byte = [0; 2];
+        self.read.read_exact(&mut byte)?;
+        Ok(i16::from_be_bytes(byte))
+    }
+
+    #[inline]
+    fn read_i32(&mut self) -> Result<i32, de::DeserializeError> {
+        let mut byte = [0; 4];
+        self.read.read_exact(&mut byte)?;
+        Ok(i32::from_be_bytes(byte))
+    }
+
+    #[inline]
+    fn read_i64(&mut self) -> Result<i64, de::DeserializeError> {
+        let mut byte = [0; 8];
+        self.read.read_exact(&mut byte)?;
+        Ok(i64::from_be_bytes(byte))
+    }
+
+    #[inline]
+    fn read_f32(&mut self) -> Result<f32, de::DeserializeError> {
+        let mut byte = [0; 4];
+        self.read.read_exact(&mut byte)?;
+        Ok(f32::from_be_bytes(byte))
+    }
+
+    #[inline]
+    fn read_f64(&mut self) -> Result<f64, de::DeserializeError> {
+        let mut byte = [0; 8];
+        self.read.read_exact(&mut byte)?;
+        Ok(f64::from_be_bytes(byte))
+    }
+
+    fn parse(&mut self, visitor: &mut dyn de::Visitor) -> Result<(), de::DeserializeError> {
+        match self.read_u8()? {
+            val @ 0x80..=0x8f => {
+                self.parse_map((val - 0x80) as usize, &mut *visitor.visit_struct()?)
+            }
+            0xde => {
+                let len = self.read_u16()? as usize;
+                self.parse_map(len, &mut *visitor.visit_struct()?)
+            }
+            0xdf => {
+                let len = self.read_u32()? as usize;
+                self.parse_map(len, &mut *visitor.visit_struct()?)
+            }
+            val @ 0x90..=0x9f => {
+                let len = (val - 0x90) as usize;
+                self.parse_array(len, &mut *visitor.visit_seq(Some(len))?)
+            }
+            0xdc => {
+                let len = self.read_u16()? as usize;
+                self.parse_array(len, &mut *visitor.visit_seq(Some(len))?)
+            }
+            0xdd => {
+                let len = self.read_u32()? as usize;
+                self.parse_array(len, &mut *visitor.visit_seq(Some(len))?)
+            }
+            discriminant @ 0x00..=0x7f | discriminant @ 0xcc..=0xcf => {
+                let value = self.parse_unsigned(discriminant)?;
+                visitor.visit_unsigned(value)
+            }
+            discriminant @ 0xe0..=0xff | discriminant @ 0xd0..=0xd3 => {
+                let value = self.parse_signed(discriminant)?;
+                visitor.visit_signed(value)
+            }
+            0xca => {
+                let value = self.read_f32()?;
+                visitor.visit_float(value as f64)
+            }
+            0xcb => {
+                let value = self.read_f64()?;
+                visitor.visit_float(value)
+            }
+            0xc0 => visitor.visit_null(),
+            0xc2 => visitor.visit_bool(false),
+            0xc3 => visitor.visit_bool(true),
+            val @ 0xa0..=0xbf => self.parse_str((val - 0xa0) as usize, visitor),
+            0xd9 => {
+                let len = self.read_u8()? as usize;
+                self.parse_str(len, visitor)
+            }
+            0xda => {
+                let len = self.read_u16()? as usize;
+                self.parse_str(len, visitor)
+            }
+            0xdb => {
+                let len = self.read_u32()? as usize;
+                self.parse_str(len, visitor)
+            }
+            _ => Err(de::DeserializeError::ParsingError),
+        }
+    }
+
+    fn parse_unsigned(&mut self, disciminant: u8) -> Result<u64, de::DeserializeError> {
+        match disciminant {
+            val @ 0x00..=0x7f => Ok(val as u64),
+            0xcc => Ok(self.read_u8()? as u64),
+            0xcd => Ok(self.read_u16()? as u64),
+            0xce => Ok(self.read_u32()? as u64),
+            0xcf => Ok(self.read_u64()? as u64),
+            _ => Err(de::DeserializeError::ParsingError),
+        }
+    }
+
+    fn parse_signed(&mut self, disciminant: u8) -> Result<i64, de::DeserializeError> {
+        match disciminant {
+            val @ 0xe0..=0xff => Ok(val as i8 as i64),
+            0xd0 => Ok(self.read_i8()? as i64),
+            0xd1 => Ok(self.read_i16()? as i64),
+            0xd2 => Ok(self.read_i32()? as i64),
+            0xd3 => Ok(self.read_i64()? as i64),
+            _ => Err(de::DeserializeError::ParsingError),
+        }
+    }
+
+    fn parse_map(
+        &mut self,
+        len: usize,
+        builder: &mut dyn de::StructBuilder,
+    ) -> Result<(), de::DeserializeError> {
+        for _ in 0..len {
+            let id_d = self.read_u8()?;
+            let id = self.parse_unsigned(id_d)? as u32;
+            self.parse(builder.member(Some(id), None)?)?;
+        }
+        builder.finish()
+    }
+
+    fn parse_array(
+        &mut self,
+        len: usize,
+        builder: &mut dyn de::SeqBuilder,
+    ) -> Result<(), de::DeserializeError> {
+        for _ in 0..len {
+            self.parse(builder.element()?)?;
+        }
+        builder.finish()
+    }
+
+    fn parse_str(
+        &mut self,
+        len: usize,
+        visitor: &mut dyn de::Visitor,
+    ) -> Result<(), de::DeserializeError> {
+        let mut buffer = Vec::new();
+        buffer.resize(len, 0);
+        self.read.read_exact(&mut buffer)?;
+        let s = std::str::from_utf8(&buffer).map_err(|_| de::DeserializeError::ParsingError)?;
+        visitor.visit_str(&s)
+    }
+}
+
+impl<R: io::Read> de::Deserializer for Deserializer<R> {
+    fn deserialize(&mut self, visitor: &mut dyn de::Visitor) -> Result<(), de::DeserializeError> {
+        self.parse(visitor)
     }
 }

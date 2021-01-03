@@ -122,5 +122,4 @@ Future work
 
 - Reserved IDs.
 - Bytes value.
-- MessagePack implementation.
 - Improve compile-time ID unicity check error message. https://github.com/rust-lang/rust/issues/51999

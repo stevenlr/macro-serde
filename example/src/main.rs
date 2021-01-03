@@ -85,6 +85,10 @@ fn main() {
         stuff.serialize(&mut ser).unwrap();
     }
     println!("{:x?}", buffer);
+
+    let mut de = macroserde_msgpack::Deserializer::new(buffer.as_slice());
+    let person = Person::deserialize(&mut de).unwrap();
+    println!("{:#?}", person);
     /*
 
     let mut ser = macroserde_json::Serializer::new();

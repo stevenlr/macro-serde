@@ -283,3 +283,9 @@ impl Deserialize for () {
         return Place::new(out);
     }
 }
+
+impl From<std::io::Error> for DeserializeError {
+    fn from(error: std::io::Error) -> DeserializeError {
+        DeserializeError::IoError(error)
+    }
+}
