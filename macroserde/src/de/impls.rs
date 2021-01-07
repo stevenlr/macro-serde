@@ -1,4 +1,4 @@
-use super::{Deserialize, DeserializeError, SeqBuilder, Visitor};
+use super::{Deserialize, DeserializeError, SeqBuilder, StructBuilder, Visitor};
 use crate::make_place_type;
 
 make_place_type!(Place);
@@ -287,5 +287,76 @@ impl Deserialize for () {
 impl From<std::io::Error> for DeserializeError {
     fn from(error: std::io::Error) -> DeserializeError {
         DeserializeError::IoError(error)
+    }
+}
+
+pub struct NullVisitor;
+
+pub struct NullStructBuilder {
+    inner: NullVisitor,
+}
+
+pub struct NullSeqBuilder {
+    inner: NullVisitor,
+}
+
+impl StructBuilder for NullStructBuilder {
+    fn member(
+        &mut self,
+        _id: Option<u32>,
+        _name: Option<&str>,
+    ) -> Result<&mut dyn Visitor, DeserializeError> {
+        Ok(&mut self.inner)
+    }
+
+    fn finish(&mut self) -> Result<(), DeserializeError> {
+        Ok(())
+    }
+}
+
+impl SeqBuilder for NullSeqBuilder {
+    fn element(&mut self) -> Result<&mut dyn Visitor, DeserializeError> {
+        Ok(&mut self.inner)
+    }
+
+    fn finish(&mut self) -> Result<(), DeserializeError> {
+        Ok(())
+    }
+}
+
+impl Visitor for NullVisitor {
+    fn visit_null(&mut self) -> Result<(), DeserializeError> {
+        Ok(())
+    }
+
+    fn visit_bool(&mut self, _value: bool) -> Result<(), DeserializeError> {
+        Ok(())
+    }
+
+    fn visit_signed(&mut self, _value: i64) -> Result<(), DeserializeError> {
+        Ok(())
+    }
+
+    fn visit_unsigned(&mut self, _value: u64) -> Result<(), DeserializeError> {
+        Ok(())
+    }
+
+    fn visit_float(&mut self, _value: f64) -> Result<(), DeserializeError> {
+        Ok(())
+    }
+
+    fn visit_str(&mut self, _value: &str) -> Result<(), DeserializeError> {
+        Ok(())
+    }
+
+    fn visit_seq<'a>(
+        &'a mut self,
+        _size_hint: Option<usize>,
+    ) -> Result<Box<dyn SeqBuilder + 'a>, DeserializeError> {
+        Ok(Box::new(NullSeqBuilder { inner: NullVisitor }))
+    }
+
+    fn visit_struct<'a>(&'a mut self) -> Result<Box<dyn StructBuilder + 'a>, DeserializeError> {
+        Ok(Box::new(NullStructBuilder { inner: NullVisitor }))
     }
 }

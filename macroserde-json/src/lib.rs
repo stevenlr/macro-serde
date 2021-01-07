@@ -166,11 +166,17 @@ impl Deserializer {
         value: &json::JsonValue,
         visitor: &mut dyn de::Visitor,
     ) -> Result<(), de::DeserializeError> {
+        let mut null_visitor = de::NullVisitor;
         let mut builder = visitor.visit_struct()?;
         for entry in value.entries() {
             let (id, name) = Self::split_key(entry.0);
-            let visitor = builder.member(id, Some(name))?;
-            Self::visit_value(entry.1, visitor)?;
+            match builder.member(id, Some(name)) {
+                Ok(visitor) => Self::visit_value(entry.1, visitor)?,
+                Err(de::DeserializeError::UnknownField) => {
+                    Self::visit_value(entry.1, &mut null_visitor)?
+                }
+                Err(e) => Err(e)?,
+            }
         }
         builder.finish()
     }

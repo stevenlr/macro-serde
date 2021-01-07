@@ -342,10 +342,15 @@ impl<R: io::Read> Deserializer<R> {
         len: usize,
         builder: &mut dyn de::StructBuilder,
     ) -> Result<(), de::DeserializeError> {
+        let mut null_visitor = de::NullVisitor;
         for _ in 0..len {
             let id_d = self.read_u8()?;
             let id = self.parse_unsigned(id_d)? as u32;
-            self.parse(builder.member(Some(id), None)?)?;
+            match builder.member(Some(id), None) {
+                Ok(visitor) => self.parse(visitor)?,
+                Err(de::DeserializeError::UnknownField) => self.parse(&mut null_visitor)?,
+                Err(e) => Err(e)?,
+            }
         }
         builder.finish()
     }
